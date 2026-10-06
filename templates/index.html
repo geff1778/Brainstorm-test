@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#8b5cf6">
+  <meta name="description" content="BrainStorm — интерактивная викторина в реальном времени с вопросами, сгенерированными ИИ (GigaChat).">
+  <title>🧠 Мозговой Штурм</title>
+  <link rel="icon" href="/static/favicon.png">
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="stylesheet" href="/static/css/style.css?v=FINAL2">
+  <style>
+/* auth view центрирование */
+#view-auth {
+  margin: 0 auto;
+  width: 100%;
+  max-width: 480px;
+  position: relative;
+  z-index: 10;
+}
+#view-auth.active {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#view-auth > *, #auth-logged-out, #auth-logged-in { width: 100%; }
+/* Восстановить tab-panel регистрации */
+#tab-auth-register.active { display: block !important; }
+/* Центрируем сами карточки */
+#tab-auth-login, #tab-auth-register { max-width: 480px; width: 100%; }
+</style>
+</head>
+<body class="dark">
+<div class="bg-mesh"></div>
+<canvas id="neural-canvas"></canvas>
+<div id="toasts" class="toasts"></div>
+<div id="reactions-overlay" class="reactions-overlay"></div>
+
+<!-- Дублирующая вкладка — предупреждение -->
+<div id="duplicate-tab-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(8,5,22,.97);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="font-size:3rem">⚠️</div>
+  <div style="font-family:var(--font-head);font-size:1.1rem;color:var(--accent);text-align:center">Игра уже открыта в другой вкладке</div>
+  <div style="color:var(--text-muted);font-size:.9rem;text-align:center;max-width:300px">Закрой ту вкладку или используй эту как основную</div>
+  <button id="duplicate-take-over" class="btn btn-primary">Использовать эту вкладку</button>
+</div>
+
+<!-- Overlay анимированного перехода -->
+<div id="transition-overlay" class="transition-overlay" style="display:none">
+</div>
+
+<div class="toolbar">
+  <button id="btn-leaderboard" class="toolbar-btn" title="Таблица лидеров">🏆</button>
+  <button id="btn-profile"     class="toolbar-btn" title="Профиль">👤</button>
+  <button id="btn-settings"    class="toolbar-btn" title="Настройки">⚙️</button>
+</div>
+
+<!-- ══ MODALS ══ -->
+<div id="modal-leaderboard" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header"><h2>🏆 Глобальный рейтинг</h2><button class="modal-close" data-modal="modal-leaderboard">✕</button></div>
+    <div id="lb-my-rank" class="lb-my-rank" style="display:none"></div>
+    <div id="lb-content" class="lb-content"><p class="muted center" style="padding:20px 0">Загрузка...</p></div>
+    <div class="lb-footer">🌍 Все игроки всех сессий</div>
+  </div>
+</div>
+
+<div id="modal-profile" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header"><h2>👤 Профиль</h2><button class="modal-close" data-modal="modal-profile">✕</button></div>
+    <div class="modal-body">
+      <div class="profile-top">
+        <div class="profile-avatar-big" id="profile-avatar-display">🧠</div>
+        <div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <div class="profile-name" id="profile-name-display">Игрок</div>
+            <button id="btn-edit-nick" style="background:none;border:1px solid var(--card-border);border-radius:6px;color:var(--text-muted);font-size:.72rem;padding:2px 8px;cursor:pointer;transition:all .2s" title="Изменить ник">✏️ Ник</button>
+          </div>
+          <div id="nick-edit-row" style="display:none;margin-top:6px;display:none">
+            <input id="nick-edit-input" class="inp" style="font-size:.9rem;padding:6px 10px;margin-bottom:6px" placeholder="Новый никнейм...">
+            <div style="display:flex;gap:6px">
+              <button id="btn-nick-save" class="btn btn-primary" style="flex:1;font-size:.82rem;padding:7px">✅ Сохранить</button>
+              <button id="btn-nick-cancel" class="btn btn-secondary" style="font-size:.82rem;padding:7px">✕</button>
+            </div>
+          </div>
+          <div class="profile-level"><span>⭐ Уровень</span><span id="profile-level-val">1</span></div>
+          <div class="profile-xp-bar"><div class="profile-xp-fill" id="profile-xp-fill" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="profile-stats-grid">
+        <div class="stat-box"><div class="stat-val" id="pstat-games">0</div><div class="stat-lbl">Игр</div></div>
+        <div class="stat-box"><div class="stat-val" id="pstat-wins">0</div><div class="stat-lbl">Побед</div></div>
+        <div class="stat-box"><div class="stat-val" id="pstat-score">0</div><div class="stat-lbl">Очков</div></div>
+      </div>
+      <p class="field-label" style="margin-bottom:8px">Аватар</p>
+      <div class="avatar-grid" id="avatar-grid"></div>
+      <hr class="divider">
+      <p class="field-label" style="margin-bottom:10px">История игр</p>
+      <div class="history-list" id="history-list"><p class="muted" style="font-size:.85rem">Нет сыгранных игр</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CHEAT HELP MODAL ══ -->
+<div id="modal-cheat-help" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header"><h2>❓ Справка по читам</h2><button class="modal-close" data-modal="modal-cheat-help">✕</button></div>
+    <div class="modal-body">
+      <div id="cheat-help-content" style="font-size:.9rem;line-height:1.6"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SETTINGS MODAL — многостраничная ══ -->
+<div id="modal-settings" class="modal" style="display:none">
+  <div class="modal-box modal-box-wide">
+    <div class="modal-header"><h2>⚙️ Настройки</h2><button class="modal-close" data-modal="modal-settings">✕</button></div>
+    <div class="settings-layout">
+      <!-- Левая боковая навигация -->
+      <nav class="settings-nav">
+        <button class="snav-btn active" data-spage="spage-appearance">🎨 Вид</button>
+        <button class="snav-btn" data-spage="spage-sound">🔊 Звук</button>
+        <button class="snav-btn snav-hidden" id="snav-cheat" data-spage="spage-cheat">💀 Читы</button>
+        <button class="snav-btn" data-spage="spage-admin">🔑 Админ</button>
+      </nav>
+      <!-- Страницы настроек -->
+      <div class="settings-pages">
+
+        <!-- 🎨 Вид -->
+        <div class="spage active" id="spage-appearance">
+          <h3 class="spage-title">🎨 Оформление</h3>
+          <div class="settings-row"><div><div class="settings-label">Тёмная тема</div></div><button class="toggle on" id="toggle-theme"></button></div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label">Цвет фона</div>
+              <div class="settings-desc">Выбери свой цвет или оставь стандартный</div>
+            </div>
+          </div>
+          <div class="color-picker-wrap" style="margin-bottom:12px">
+            <div class="color-swatch-row">
+              <div class="color-swatch reset" id="bg-reset-swatch" title="Сброс" style="position:relative">
+                <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;color:#fff;font-weight:700">↺</span>
+              </div>
+              <div class="color-swatch" style="background:#0f0b1e" data-color="#0f0b1e" title="Тёмно-фиолетовый"></div>
+              <div class="color-swatch" style="background:#0a0a1a" data-color="#0a0a1a" title="Полночь"></div>
+              <div class="color-swatch" style="background:#0d1b2a" data-color="#0d1b2a" title="Океан"></div>
+              <div class="color-swatch" style="background:#1a1a2e" data-color="#1a1a2e" title="Сапфир"></div>
+              <div class="color-swatch" style="background:#0f2027" data-color="#0f2027" title="Изумруд"></div>
+              <div class="color-swatch" style="background:#1a0a0a" data-color="#1a0a0a" title="Бордо"></div>
+              <div class="color-swatch" style="background:#f4f1ff" data-color="#f4f1ff" title="Лаванда"></div>
+              <div class="color-swatch" style="background:#f0fff4" data-color="#f0fff4" title="Мята"></div>
+            </div>
+            <input type="color" id="bg-color-input" title="Выбери любой цвет" value="#0f0b1e">
+          </div>
+          <div class="settings-row"><div><div class="settings-label">Конфетти 🎉</div></div><button class="toggle on" id="toggle-confetti"></button></div>
+          <div class="settings-row"><div><div class="settings-label">Частицы фона</div></div><button class="toggle on" id="toggle-particles"></button></div>
+          <div class="settings-row"><div><div class="settings-label">Анимации переходов</div><div class="settings-desc">Плавные смены экранов</div></div><button class="toggle on" id="toggle-animations"></button></div>
+        </div>
+
+        <!-- 🔊 Звук -->
+        <div class="spage" id="spage-sound">
+          <h3 class="spage-title">🔊 Звук</h3>
+          <div class="settings-row"><div><div class="settings-label">Звук включён</div></div><button class="toggle on" id="toggle-sound"></button></div>
+          <div class="settings-row"><div><div class="settings-label">Тиканье таймера</div></div><button class="toggle on" id="toggle-tick"></button></div>
+          <div class="settings-row"><div><div class="settings-label">Звуки событий</div></div><button class="toggle on" id="toggle-event-sound"></button></div>
+        </div>
+
+        <!-- 💀 Чит-меню — активируется кодом -->
+        <div class="spage" id="spage-cheat">
+          <h3 class="spage-title">💀 Чит-меню <span style="font-size:.7rem;color:var(--red);font-weight:400">⚡ режим разработчика</span></h3>
+          <div style="background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:.82rem;color:var(--red);display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span>⚠️ Все изменения мгновенны. Осторожно.</span>
+            <button class="btn btn-sm" style="background:rgba(248,113,113,0.2);color:var(--red);border:1px solid rgba(248,113,113,0.4);flex-shrink:0" onclick="deactivateCheat()">Выйти</button>
+          </div>
+
+          <!-- Секция: Игровые читы -->
+          <p class="cheat-section-label">⚡ Игровые способности</p>
+          <div class="cheat-row">
+            <div class="cheat-label">
+              👁 Видеть правильный ответ
+              <button class="cheat-help" onclick="showCheatHelp('see-answer')">❓</button>
+            </div>
+            <button class="toggle" id="cheat-show-answer"></button>
+          </div>
+          <div class="cheat-row">
+            <div class="cheat-label">
+              💰 Редактор очков (+/−50)
+              <button class="cheat-help" onclick="showCheatHelp('edit-scores')">❓</button>
+            </div>
+            <button class="toggle" id="cheat-edit-scores"></button>
+          </div>
+          <div class="cheat-row">
+            <div class="cheat-label">
+              ♾️ Бесконечные жизни
+              <button class="cheat-help" onclick="showCheatHelp('infinite-lives')">❓</button>
+            </div>
+            <button class="toggle" id="cheat-infinite-lives"></button>
+          </div>
+          <div class="cheat-row">
+            <div class="cheat-label">
+              🔄 Неограниченные перефразировки
+              <button class="cheat-help" onclick="showCheatHelp('free-rephrase')">❓</button>
+            </div>
+            <button class="toggle" id="cheat-free-rephrase"></button>
+          </div>
+
+          <!-- Секция: Новые читы -->
+          <p class="cheat-section-label" style="margin-top:14px">🆕 Новые инструменты</p>
+          <button class="btn btn-secondary btn-full mb-8" id="cheat-skip-btn">⏭️ Пропустить вопрос</button>
+          <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
+            <input id="cheat-lives-player" class="inp" style="flex:1;padding:6px 10px;font-size:.83rem" placeholder="Ник игрока">
+            <input id="cheat-lives-count"  class="inp" style="width:56px;padding:6px 8px;font-size:.83rem;text-align:center" type="number" value="3" min="0" max="10">
+            <button class="btn btn-sm btn-secondary" id="cheat-set-lives-btn">❤️</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
+            <input id="cheat-add-score-amount" class="inp" style="flex:1;padding:6px 10px;font-size:.83rem;text-align:center" type="number" value="100" step="50">
+            <button class="btn btn-sm btn-secondary" id="cheat-add-score-all-btn">💰 +Очки всем</button>
+          </div>
+
+          <!-- Секция: Управление игрой -->
+          <p class="cheat-section-label" style="margin-top:14px">🎮 Управление игрой</p>
+          <button class="btn btn-ghost btn-full mb-8" id="cheat-force-start-btn">🚀 Принудительный старт</button>
+          <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
+            <input id="cheat-room-code" class="inp" style="flex:1;padding:6px 10px;font-size:.83rem" placeholder="Код комнаты">
+            <button class="btn btn-sm btn-secondary" id="cheat-teleport-btn">🔀 Телепорт</button>
+          </div>
+
+          <!-- Секция: Действия с игроком -->
+          <p class="cheat-section-label" style="margin-top:14px">🎯 Действия с игроком</p>
+          <div style="display:flex;gap:8px;margin-bottom:6px">
+            <input id="cheat-target-player" class="inp" style="flex:1;padding:6px 10px;font-size:.83rem" placeholder="Ник игрока">
+            <button class="btn btn-sm btn-danger" id="cheat-reset-player-btn">Сброс</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:6px">
+            <input id="cheat-global-reset-nick" class="inp" style="flex:1;padding:6px 10px;font-size:.83rem" placeholder="Ник (глобальный сброс)">
+            <button class="btn btn-sm btn-danger" id="cheat-global-reset-btn">Сброс БД</button>
+          </div>
+
+          <!-- Секция: Статистика ответов -->
+          <p class="cheat-section-label" style="margin-top:14px">📊 Скрытая статистика</p>
+          <div id="cheat-answer-stats" style="font-size:.82rem;color:var(--text-muted);background:rgba(0,0,0,0.15);border-radius:8px;padding:8px 10px;min-height:36px">Появится во время вопроса</div>
+        </div>
+
+        <!-- 🔑 Админ -->
+        <div class="spage" id="spage-admin">
+          <h3 class="spage-title">🔑 Администратор</h3>
+          <div id="admin-key-section">
+            <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">Введите код для активации режима. Чит-меню или Admin-панель откроются автоматически.</p>
+            <div class="admin-key-wrap">
+              <input type="password" id="admin-key-input" class="inp" placeholder="Введите код доступа" maxlength="20">
+              <button class="btn btn-primary btn-sm" id="btn-admin-activate">🔑 Ввести</button>
+            </div>
+            <p id="admin-key-error" class="field-error" style="display:none">❌ Неверный код</p>
+          </div>
+
+          <div id="admin-panel-section" style="display:none">
+            <div style="background:rgba(139,92,246,0.08);border:1px solid var(--card-border);border-radius:10px;padding:10px;margin-bottom:14px;font-size:.84rem;color:var(--accent)">✅ Режим администратора активен</div>
+
+            <!-- Вложенная навигация админ-панели -->
+            <div class="admin-subnav">
+              <button class="admin-snav-btn active" data-atab="apage-rooms">🏠 Комнаты</button>
+              <button class="admin-snav-btn" data-atab="apage-users">👥 Юзеры</button>
+              <button class="admin-snav-btn" data-atab="apage-profiles">💼 Профили</button>
+              <button class="admin-snav-btn" data-atab="apage-bans">🚫 Баны</button>
+              <button class="admin-snav-btn" data-atab="apage-ipban">🌐 IP-Ban</button>
+              <button class="admin-snav-btn" data-atab="apage-stats">📊 Статистика</button>
+              <button class="admin-snav-btn" data-atab="apage-history">📜 История</button>
+              <button class="admin-snav-btn" data-atab="apage-chat">💬 Чат</button>
+            </div>
+
+            <!-- Комнаты -->
+            <div class="apage active" id="apage-rooms">
+              <div id="admin-rooms-list"><p class="muted" style="font-size:.85rem">Загрузка...</p></div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button class="btn btn-secondary btn-full" id="btn-admin-refresh">🔄 Обновить</button>
+                <button class="btn btn-danger" id="btn-admin-cleanup" title="Удалить пустые и давно неактивные комнаты">🧹 Очистить</button>
+              </div>
+            </div>
+
+            <!-- Юзеры -->
+            <div class="apage" id="apage-users" style="display:none">
+              <div style="display:flex;gap:8px;margin-bottom:10px">
+                <input id="admin-user-filter" class="inp" style="flex:1;padding:6px 10px;font-size:.83rem" placeholder="Фильтр по нику">
+                <button class="btn btn-sm btn-secondary" id="admin-user-search-btn">🔍</button>
+              </div>
+              <div id="admin-users-list"><p class="muted" style="font-size:.85rem">Загрузка...</p></div>
+            </div>
+
+            <!-- Профили (управление аккаунтами) -->
+            <div class="apage" id="apage-profiles" style="display:none">
+              <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:12px">🎭 Вход в аккаунт игрока (без выкидывания) · ✏️ Редактирование · 🗑 Удаление</p>
+              
+              <!-- Имперсонация -->
+              <div class="card" style="margin-bottom:12px">
+                <h4 style="margin:0 0 10px 0;font-size:.88rem">🎭 Войти в аккаунт игрока</h4>
+                <div style="display:flex;gap:8px">
+                  <input id="admin-impersonate-user" class="inp" style="flex:1" placeholder="Никнейм игрока">
+                  <button class="btn btn-sm btn-primary" id="admin-impersonate-btn">Войти</button>
+                </div>
+                <div id="admin-impersonate-status" style="display:none;margin-top:8px;padding:8px;background:rgba(139,92,246,0.1);border-radius:6px;font-size:.82rem">
+                  👤 Вы в аккаунте: <b id="admin-impersonate-username"></b>
+                  <button class="btn btn-sm btn-secondary" id="admin-stop-impersonate" style="margin-left:8px">Выйти</button>
+                </div>
+              </div>
+
+              <!-- Редактирование профиля -->
+              <div class="card" style="margin-bottom:12px">
+                <h4 style="margin:0 0 10px 0;font-size:.88rem">✏️ Редактировать профиль</h4>
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                  <input id="admin-edit-user" class="inp" style="flex:1" placeholder="Никнейм">
+                  <button class="btn btn-sm btn-secondary" id="admin-edit-load-btn">Загрузить</button>
+                </div>
+                <div id="admin-edit-form" style="display:none">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div>
+                      <label style="font-size:.75rem;color:var(--text-muted)">Отображаемое имя</label>
+                      <input id="admin-edit-display-name" class="inp" placeholder="Имя">
+                    </div>
+                    <div>
+                      <label style="font-size:.75rem;color:var(--text-muted)">Аватар</label>
+                      <input id="admin-edit-avatar" class="inp" placeholder="emoji">
+                    </div>
+                    <div>
+                      <label style="font-size:.75rem;color:var(--text-muted)">Монеты</label>
+                      <input id="admin-edit-coins" class="inp" type="number" placeholder="0">
+                    </div>
+                    <div>
+                      <label style="font-size:.75rem;color:var(--text-muted)">XP</label>
+                      <input id="admin-edit-xp" class="inp" type="number" placeholder="0">
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:8px;margin-top:8px">
+                    <button class="btn btn-sm btn-primary" id="admin-edit-save-btn">✅ Сохранить</button>
+                    <button class="btn btn-sm btn-danger" id="admin-edit-delete-btn">🗑 Удалить аккаунт</button>
+                  </div>
+                  <p id="admin-edit-confirm-delete" style="display:none;font-size:.75rem;color:var(--red);margin-top:6px">
+                    Введите "DELETE" для подтверждения: <input type="text" id="admin-edit-delete-confirm" style="font-size:.75rem;padding:4px 8px;margin-left:6px" placeholder="DELETE">
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Баны -->
+            <div class="apage" id="apage-bans" style="display:none">
+              <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+                <input id="admin-ban-nick" class="inp" style="padding:6px 10px;font-size:.83rem" placeholder="Ник игрока">
+                <input id="admin-ban-reason" class="inp" style="padding:6px 10px;font-size:.83rem" placeholder="Причина">
+                <div style="display:flex;gap:8px">
+                  <input id="admin-ban-duration" class="inp" type="number" style="flex:1;padding:6px 10px;font-size:.83rem" value="60" placeholder="Минут">
+                  <button class="btn btn-sm btn-danger" id="admin-ban-btn">🚫 Бан</button>
+                  <button class="btn btn-sm btn-secondary" id="admin-unban-btn">Разбан</button>
+                </div>
+              </div>
+              <div id="admin-bans-list"><p class="muted" style="font-size:.85rem">Нет активных банов</p></div>
+              <button class="btn btn-secondary btn-full mt-8" id="admin-bans-refresh-btn">🔄 Обновить</button>
+            </div>
+
+            <!-- IP-Ban -->
+            <div class="apage" id="apage-ipban" style="display:none">
+              <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:10px">Блокировка по IP-адресу — полный бан игрока</p>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+                <input id="admin-ip-ban-addr" class="inp" style="padding:6px 10px;font-size:.83rem" placeholder="IP-адрес (например: 192.168.1.1)">
+                <input id="admin-ip-ban-reason" class="inp" style="padding:6px 10px;font-size:.83rem" placeholder="Причина">
+                <div style="display:flex;gap:8px">
+                  <input id="admin-ip-ban-duration" class="inp" type="number" style="flex:1;padding:6px 10px;font-size:.83rem" value="1440" placeholder="Минут (1440=сутки)">
+                  <button class="btn btn-sm btn-danger" id="admin-ip-ban-btn">🌐 IP Бан</button>
+                  <button class="btn btn-sm btn-secondary" id="admin-ip-unban-btn">✅ Разбан</button>
+                </div>
+              </div>
+              <div id="admin-ip-bans-list"><p class="muted" style="font-size:.85rem">Нет IP-банов</p></div>
+              <button class="btn btn-secondary btn-full mt-8" id="admin-ip-bans-refresh-btn">🔄 Обновить</button>
+            </div>
+
+            <!-- Статистика сервера -->
+            <div class="apage" id="apage-stats" style="display:none">
+              <button class="btn btn-secondary btn-full mb-8" id="admin-stats-refresh-btn">🔄 Обновить</button>
+              <div id="admin-server-stats"><p class="muted" style="font-size:.85rem">Нажми Обновить</p></div>
+            </div>
+
+            <!-- История -->
+            <div class="apage" id="apage-history" style="display:none">
+              <div style="display:flex;gap:8px;margin-bottom:10px">
+                <input id="admin-history-code" class="inp" style="flex:1;padding:6px 10px;font-size:.83rem;text-transform:uppercase;letter-spacing:2px" placeholder="КОД КОМНАТЫ">
+                <button class="btn btn-sm btn-secondary" id="admin-history-btn">📜</button>
+              </div>
+              <div id="admin-history-list"><p class="muted" style="font-size:.85rem">Введите код</p></div>
+              <hr style="border-color:rgba(255,255,255,0.07);margin:12px 0">
+              <button class="btn btn-danger btn-full" id="admin-reset-server-btn">🗑 Очистить кэш и завершённые комнаты</button>
+            </div>
+
+            <!-- Чат -->
+            <div class="apage" id="apage-chat" style="display:none">
+              <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:10px">Отправить системное сообщение в чат комнаты</p>
+              <div style="display:flex;gap:8px;margin-bottom:8px">
+                <input id="admin-chat-code" class="inp" style="flex:1;padding:6px 10px;font-size:.83rem;text-transform:uppercase;letter-spacing:2px" placeholder="КОД КОМНАТЫ">
+              </div>
+              <div style="display:flex;gap:8px;margin-bottom:8px">
+                <input id="admin-chat-text" class="inp" style="flex:1;padding:6px 10px;font-size:.83rem" placeholder="Текст сообщения">
+                <button class="btn btn-sm btn-secondary" id="admin-chat-send-btn">📨 Отправить</button>
+              </div>
+            </div>
+
+            <button class="btn btn-danger btn-full mt-12" id="btn-admin-logout">Выйти из админки</button>
+          </div>
+        </div>
+
+      </div><!-- /settings-pages -->
+    </div><!-- /settings-layout -->
+  </div>
+</div>
+
+<!-- ══ MAIN VIEW ══ -->
+<div class="app-container">
+<div id="view-main" class="view active">
+  <div class="hero">
+    <div class="hero-logo">🧠 Мозговой Штурм</div>
+    <div class="hero-sub">Викторина с искусственным интеллектом</div>
+    <!-- Блок авторизованного пользователя -->
+    <div id="hero-user-bar" style="display:none;margin-top:10px;background:rgba(139,92,246,0.12);border:1px solid var(--card-border);border-radius:12px;padding:8px 16px;display:none;flex-direction:row;align-items:center;gap:10px;justify-content:space-between">
+      <span id="hero-user-name" style="font-weight:700;font-size:.9rem"></span>
+      <span id="hero-user-coins" style="font-size:.8rem;color:var(--gold)">💰 0</span>
+      <span id="hero-user-level" style="font-size:.8rem;color:var(--accent)">Ур. 1</span>
+      <button class="btn btn-sm btn-ghost" onclick="showView('view-auth')">👤</button>
+    </div>
+  </div>
+
+  <div class="tab-switcher">
+    <button class="tab-btn active" data-tab="create">✨ Создать</button>
+    <button class="tab-btn" data-tab="join">🚀 Войти</button>
+    <button class="tab-btn" data-tab="public">🌐 Публичные</button>
+  </div>
+
+  <!-- Create -->
+  <div id="tab-create" class="tab-panel active card">
+    <h2 class="card-title">Создать новое лобби</h2>
+    <label class="field-label" for="create-name">Ваше имя</label>
+    <input id="create-name" class="inp" type="text" placeholder="Например: Алекс" maxlength="20" autocomplete="off">
+    <div id="create-name-error" class="field-error" style="display:none">⚠️ Введите имя</div>
+    <div class="settings-row mt-12">
+      <div><div class="settings-label">Публичная комната</div><div class="settings-desc">Видна всем в списке</div></div>
+      <button class="toggle" id="toggle-public"></button>
+    </div>
+    <button id="btn-create" class="btn btn-primary btn-full mt-12">✨ Создать лобби</button>
+  </div>
+
+  <!-- Join -->
+  <div id="tab-join" class="tab-panel card" style="display:none">
+    <h2 class="card-title">Войти в игру</h2>
+    <label class="field-label" for="join-name">Ваше имя</label>
+    <input id="join-name" class="inp" type="text" placeholder="Например: Катя" maxlength="20" autocomplete="off">
+    <label class="field-label mt-12" for="join-code">Код комнаты</label>
+    <input id="join-code" class="inp mt-8" type="text" placeholder="ABCDEF" maxlength="6" autocomplete="off" style="text-transform:uppercase;letter-spacing:4px;font-family:'JetBrains Mono',monospace">
+    <div id="join-error" class="field-error" style="display:none">⚠️ Введите имя и код</div>
+    <button id="btn-join" class="btn btn-primary btn-full mt-12">🚀 Войти</button>
+  </div>
+
+  <!-- Public -->
+  <div id="tab-public" class="tab-panel card" style="display:none">
+    <h2 class="card-title">🌐 Публичные комнаты</h2>
+    <label class="field-label" for="public-name">Ваше имя</label>
+    <input id="public-name" class="inp" type="text" placeholder="Например: Вася" maxlength="20" autocomplete="off">
+    <div id="public-rooms-list" class="mt-12"><p class="muted" style="font-size:.85rem">Нажми «Обновить»</p></div>
+    <button class="btn btn-ghost btn-full mt-12" id="btn-refresh-public">🔄 Обновить список</button>
+  </div>
+</div>
+
+<!-- ══ LOBBY VIEW ══ -->
+<div id="view-lobby" class="view">
+  <div class="lobby-top">
+    <div class="hero-logo" style="font-size:2rem">🧠 BrainStorm</div>
+    <div class="code-block mt-8">
+      <span class="code-lbl">Код:</span>
+      <span id="lobby-code" class="code-val">------</span>
+      <button id="btn-copy"  class="btn-icon">📋</button>
+      <button id="btn-share" class="btn-icon">🔗</button>
+    </div>
+  </div>
+
+  <!-- Основная область лобби: список игроков + чат рядом -->
+  <div class="lobby-main-grid">
+    <!-- Левый блок: настройки + игроки + команды + КНБ -->
+    <div class="lobby-left">
+
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3>👥 Игроки <span id="players-count">(0)</span></h3>
+        </div>
+        <ul id="players-list" class="players-list"></ul>
+      </div>
+
+      <!-- Teams panel -->
+      <div id="teams-panel" class="card" style="display:none">
+        <h3 style="margin-bottom:12px">🤝 Команды</h3>
+        <div id="teams-setup">
+          <div class="grid-2" style="margin-bottom:10px">
+            <div>
+              <label class="field-label">Кол-во команд</label>
+              <select id="team-count-select" class="inp">
+                <option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                <option value="5">5</option><option value="6">6</option><option value="7">7</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">Режим набора</label>
+              <select id="team-draft-mode" class="inp">
+                <option value="auto">Автоматически</option>
+                <option value="draft">Капитаны выбирают</option>
+              </select>
+            </div>
+          </div>
+          <div id="team-names-inputs"></div>
+          <button class="btn btn-secondary btn-full mt-8" id="btn-init-teams">⚡ Создать команды</button>
+        </div>
+        <div id="teams-list-display"></div>
+        <div id="draft-panel" style="display:none">
+          <div id="draft-turn-label" style="font-size:.9rem;font-weight:700;color:var(--accent);margin-bottom:10px"></div>
+          <div id="draft-available-players"></div>
+        </div>
+      </div>
+
+      <!-- Host settings -->
+      <div id="host-settings" class="card" style="display:none">
+        <h3 style="margin-bottom:16px">⚙️ Настройки игры</h3>
+        <label class="field-label" for="s-topic">Тема</label>
+        <input id="s-topic" class="inp" type="text" placeholder="Майнкрафт, история, музыка..." value="Общие знания">
+        <div class="grid-2 mt-12">
+          <div>
+            <label class="field-label">Вопросов</label>
+            <select id="s-count" class="inp">
+              <option value="5">5</option><option value="10" selected>10</option>
+              <option value="15">15</option><option value="20">20</option><option value="30">30</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Сложность</label>
+            <select id="s-diff" class="inp">
+              <option value="easy">😊 Лёгкая</option>
+              <option value="medium" selected>🧠 Средняя</option>
+              <option value="hard">🔥 Сложная</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Вариантов</label>
+            <select id="s-options" class="inp">
+              <option value="2">2</option><option value="3">3</option><option value="4" selected>4</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Режим</label>
+            <select id="s-mode" class="inp">
+              <option value="classic">🏆 Классика</option>
+              <option value="ffa">⚡ FFA</option>
+              <option value="team">🤝 Командный</option>
+              <option value="lives">❤️ На вылет</option>
+              <option value="coop">🌟 Кооп</option>
+              <option value="svoyaigra">🎯 Своя игра</option>
+            </select>
+          </div>
+        </div>
+        <!-- Своя игра: настройки категорий -->
+        <div id="si-settings" style="display:none;margin-top:12px">
+          <label class="field-label">Категории (через запятую)</label>
+          <input id="si-categories" class="inp mt-4" placeholder="История, Наука, Спорт" value="История, Наука, Спорт">
+          <div class="grid-2 mt-8">
+            <div>
+              <label class="field-label">Строк (уровней)</label>
+              <select id="si-rows" class="inp">
+                <option value="3">3</option><option value="4">4</option><option value="5" selected>5</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div id="mode-desc" class="mode-desc mt-8"></div>
+        <button id="btn-apply" class="btn btn-secondary btn-full mt-12">💾 Применить</button>
+      </div>
+
+      <!-- Guest settings -->
+      <div id="guest-settings" class="card" style="display:none">
+        <h3 style="margin-bottom:12px">📋 Настройки игры</h3>
+        <div class="guest-settings-grid">
+          <div class="gs-item"><span class="gs-icon">🎯</span><span class="gs-label">Тема</span><span id="gs-topic" class="gs-value">—</span></div>
+          <div class="gs-item"><span class="gs-icon">❓</span><span class="gs-label">Вопросов</span><span id="gs-count" class="gs-value">—</span></div>
+          <div class="gs-item"><span class="gs-icon">⚡</span><span class="gs-label">Сложность</span><span id="gs-diff" class="gs-value">—</span></div>
+          <div class="gs-item"><span class="gs-icon">🎮</span><span class="gs-label">Режим</span><span id="gs-mode" class="gs-value">—</span></div>
+        </div>
+        <div class="wait-hint mt-12">⏳ Ожидаем старта...</div>
+      </div>
+
+      <div class="lobby-footer">
+        <button id="btn-start"       class="btn btn-primary"  style="display:none">🎮 Начать игру</button>
+        <button id="btn-leave-lobby" class="btn btn-ghost"    style="display:none">← Выйти</button>
+      </div>
+
+      <!-- 🐍 NEON SNAKE — мини-игра в лобби -->
+      <div class="card" style="margin-top:16px;padding:16px 18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <h3 style="font-size:.95rem;margin:0">🐍 Neon Snake</h3>
+          <span style="font-size:.82rem;color:var(--gold);font-weight:700">Рекорд: <b id="snake-best">0</b></span>
+        </div>
+        <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px">Управляй змейкой пока ждёшь старта! WASD или кнопки ниже</p>
+        <canvas id="snake-canvas" width="320" height="200" style="width:100%;"></canvas>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+          <span style="font-size:.85rem">Очки: <b id="snake-pts">0</b> &nbsp;|&nbsp; Уровень: <b id="snake-lvl">1</b></span>
+          <button id="snake-start-btn" class="btn btn-sm btn-secondary">▶ Старт</button>
+        </div>
+        <!-- Кнопки управления для мобильных -->
+        <div class="snake-controls" style="margin-top:8px">
+          <button class="snake-dir-btn" data-dir="up">▲</button>
+          <div style="display:flex;gap:8px">
+            <button class="snake-dir-btn" data-dir="left">◀</button>
+            <button class="snake-dir-btn" data-dir="down">▼</button>
+            <button class="snake-dir-btn" data-dir="right">▶</button>
+          </div>
+        </div>
+        <!-- Совет под игрой -->
+        <div id="waiting-tip" style="font-size:.78rem;color:var(--text-muted);margin-top:8px;min-height:1.8em;transition:opacity .3s"></div>
+      </div>
+
+    </div><!-- /lobby-left -->
+
+    <!-- Правый блок: чат -->
+    <div class="lobby-right">
+      <div class="card chat-card">
+        <div class="chat-header">
+          <h3>💬 Чат лобби</h3>
+          <button class="btn btn-sm btn-ghost" id="btn-chat-clear" style="display:none" title="Очистить чат">🗑</button>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-row">
+          <input id="chat-input" class="inp chat-inp" placeholder="Написать..." maxlength="200" autocomplete="off">
+          <button class="btn btn-primary btn-sm" id="chat-send-btn">➤</button>
+        </div>
+      </div>
+    </div><!-- /lobby-right -->
+
+  </div><!-- /lobby-main-grid -->
+</div>
+
+<!-- ══ LOADING ══ -->
+<div id="view-loading" class="view">
+  <div class="loading-center">
+    <div class="hero-logo" style="font-size:2.2rem;margin-bottom:16px">🧠 BrainStorm</div>
+    <div class="gigachat-loader">
+      <div class="gc-brain-wrap">
+        <div class="gc-brain">🤖</div>
+        <div class="gc-rings"><div></div><div></div><div></div></div>
+      </div>
+      <div class="loading-spinner" style="margin:0 auto 12px"></div>
+    </div>
+    <p id="loading-msg" style="color:var(--accent);font-size:1.1rem;font-weight:700;margin-bottom:4px">🤖 GigaChat генерирует вопросы...</p>
+    <p id="loading-sub" style="color:var(--text-muted);font-size:.82rem">Обычно 5–15 секунд</p>
+    <div class="loading-facts" id="loading-facts-box">
+      <p id="loading-fact" style="font-size:.78rem;color:var(--text-dim);text-align:center;font-style:italic;max-width:320px;min-height:2.5em"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ GAME VIEW ══ -->
+<div id="view-game" class="view">
+  <div class="game-header">
+    <div class="progress-wrap">
+      <span id="g-qnum" class="g-qnum">Вопрос 0 / 0</span>
+      <div class="progress-track"><div id="g-progress" class="progress-fill" style="width:0%"></div></div>
+    </div>
+    <div id="g-timer" class="g-timer">30</div>
+    <button id="btn-leave-game" class="exit-btn">✕</button>
+  </div>
+
+  <div id="team-board" class="team-board" style="display:none"></div>
+
+  <div class="score-row">
+    <span class="score-lbl">Очки:</span>
+    <span id="g-score" class="score-val">0</span>
+    <span id="g-mode-badge"  class="mode-badge" style="display:none"></span>
+    <span id="g-team"        class="diff-badge"  style="display:none"></span>
+    <span id="g-lives"       class="lives-bar"   style="display:none"></span>
+    <span id="g-diff-badge"  class="diff-badge"  style="display:none"></span>
+    <span id="cheat-score-btns" style="display:none">
+      <button class="score-edit-btn" id="cheat-score-minus">−50</button>
+      <button class="score-edit-btn" id="cheat-score-plus">+50</button>
+    </span>
+  </div>
+
+  <div id="bonus-banner"    class="bonus-banner"    style="display:none">⭐ БОНУС-ВОПРОС! Двойные очки!</div>
+
+  <!-- Межвопросный экран (анимированный переход) -->
+  <div id="round-transition" class="round-transition" style="display:none">
+    <div class="rt-content">
+      <div id="rt-qnum" class="rt-qnum"></div>
+      <div id="rt-fact" class="rt-fact"></div>
+    </div>
+  </div>
+
+  <div class="question-card"><p id="g-question" class="question-text">Загрузка...</p></div>
+
+  <!-- Кнопка перефразировки -->
+  <div id="rephrase-bar" style="display:none;margin-bottom:6px">
+    <button class="btn btn-sm btn-ghost" id="btn-rephrase">🔄 Перефразировать (−50 очков)</button>
+    <span id="rephrase-used" style="display:none;font-size:.75rem;color:var(--text-muted)"> (использовано)</span>
+  </div>
+
+  <div id="options-grid" class="options-grid"></div>
+  <div id="ffa-flash" class="ffa-flash" style="display:none"></div>
+  <div id="turn-bar" class="turn-bar" style="display:none"></div>
+
+  <div id="player-tools" class="player-tools">
+    <button id="btn-joker" class="tool-btn">🃏 50/50</button>
+    <button id="btn-hint"  class="tool-btn">💡 Подсказка</button>
+    <div class="reaction-panel">
+      <button class="react-btn" data-emoji="👍">👍</button>
+      <button class="react-btn" data-emoji="😂">😂</button>
+      <button class="react-btn" data-emoji="🔥">🔥</button>
+      <button class="react-btn" data-emoji="🧠">🧠</button>
+      <button class="react-btn" data-emoji="😮">😮</button>
+      <button class="react-btn" data-emoji="🎉">🎉</button>
+    </div>
+  </div>
+
+  <div id="hint-box" class="hint-box" style="display:none"><span class="hint-icon">💡</span><span id="hint-text"></span></div>
+  <p id="g-status" class="g-status"></p>
+  <div style="display:flex;align-items:center;gap:10px;min-height:22px;margin-top:4px">
+    <span id="g-answered-notif" style="font-size:.8rem;color:var(--text-muted);opacity:0;transition:opacity 0.4s"></span>
+    <span id="g-answered-count" style="font-size:.8rem;color:var(--accent);font-weight:600" data-count="0"></span>
+  </div>
+
+  <div id="question-result-panel" class="result-panel" style="display:none">
+    <div id="result-title" class="result-title">✅ Правильно!</div>
+    <div id="result-explanation" class="result-explanation" style="display:none"></div>
+    <div id="qr-scores" class="qr-scores"></div>
+    <p class="qr-next-hint">Следующий вопрос через несколько секунд...</p>
+  </div>
+</div>
+
+<!-- ══ СВОЯ ИГРА VIEW ══ -->
+<div id="view-svoyaigra" class="view">
+  <div class="game-header">
+    <h2 style="font-size:1.1rem;font-weight:700">🎯 Своя игра</h2>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="si-selector-label" style="font-size:.85rem;color:var(--accent)"></span>
+      <button id="btn-si-leave" class="exit-btn">✕</button>
+    </div>
+  </div>
+
+  <!-- Скоры -->
+  <div id="si-scores-bar" class="si-scores-bar"></div>
+
+  <!-- Доска категорий -->
+  <div id="si-board-wrap" style="">
+    <div id="si-board" class="si-board"></div>
+  </div>
+
+  <!-- Вопрос (показывается поверх доски) -->
+  <div id="si-question-panel" class="si-question-panel" style="display:none">
+    <div class="si-q-meta">
+      <span id="si-q-category" class="si-q-cat"></span>
+      <span id="si-q-value" class="si-q-val"></span>
+    </div>
+    <p id="si-question-text" class="question-text"></p>
+    <!-- Buzzер -->
+    <button id="si-buzz-btn" class="btn btn-primary btn-full si-buzz-btn">🔔 ОТВЕТИТЬ!</button>
+    <div id="si-buzzed-info" style="display:none;font-size:.88rem;color:var(--accent);text-align:center;margin-bottom:8px"></div>
+    <!-- Варианты (только после buzzera или если хост решил показать) -->
+    <div id="si-options" class="options-grid si-options" style="display:none"></div>
+    <!-- Хост: показать ответ без начисления -->
+    <button id="si-host-reveal" class="btn btn-ghost btn-full mt-8" style="display:none">👁 Показать ответ (без начисления)</button>
+    <div id="si-result" class="si-result" style="display:none"></div>
+  </div>
+
+  <div id="si-status" style="font-size:.85rem;color:var(--text-muted);text-align:center;margin-top:8px"></div>
+</div>
+
+<!-- ══ RESULTS ══ -->
+<div id="view-results" class="view">
+  <div id="result-banner" class="result-banner" style="display:none"></div>
+  <h1 class="results-h">🏆 Итоги игры</h1>
+  <div id="leaderboard" class="leaderboard"></div>
+  <!-- Забавная статистика раунда -->
+  <div id="round-fun-stats" class="round-fun-stats" style="display:none"></div>
+  <div class="results-buttons">
+    <button id="btn-continue-squad" class="btn btn-primary"   style="display:none">▶️ Продолжить тем же составом</button>
+    <button id="btn-restart"        class="btn btn-secondary" style="display:none">🔄 Ещё раз!</button>
+    <button id="btn-tournament"     class="btn btn-secondary" style="display:none">🏟 Турнир</button>
+    <button id="btn-again"          class="btn btn-ghost">🏠 На главную</button>
+  </div>
+</div>
+
+
+<!-- ══ AUTH VIEW ══ -->
+<div id="view-auth" class="view">
+  <div style="padding-top:8px"></div>
+  <button class="btn btn-ghost btn-sm" onclick="showView('view-main')" style="margin-bottom:12px">← Назад</button>
+  <div id="auth-logged-out">
+    <div class="tab-switcher"><button class="tab-btn active" data-tab="auth-login">Войти</button><button class="tab-btn" data-tab="auth-register">Регистрация</button></div>
+    <div id="tab-auth-login" class="tab-panel active card">
+      <h2 class="card-title">👤 Войти в аккаунт</h2>
+      <label class="field-label">Имя пользователя</label>
+      <input id="auth-login-name" class="inp" placeholder="Ваш ник" maxlength="20">
+      <label class="field-label mt-12">Пароль</label>
+      <input id="auth-login-pass" class="inp" type="password" placeholder="Пароль">
+      <div id="auth-login-error" class="field-error" style="display:none"></div>
+      <button class="btn btn-primary btn-full mt-12" id="btn-auth-login">🚀 Войти</button>
+    </div>
+    <div id="tab-auth-register" class="tab-panel card" style="display:none">
+      <h2 class="card-title">✨ Создать аккаунт</h2>
+      <label class="field-label">Имя пользователя</label>
+      <input id="auth-reg-name" class="inp" placeholder="Ваш ник (2-20 символов)" maxlength="20">
+      <label class="field-label mt-12">Пароль</label>
+      <input id="auth-reg-pass" class="inp" type="password" placeholder="Мин. 4 символа">
+      <div id="auth-reg-error" class="field-error" style="display:none"></div>
+      <button class="btn btn-primary btn-full mt-12" id="btn-auth-register">✨ Создать</button>
+    </div>
+  </div>
+  <div id="auth-logged-in" style="display:none">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+        <div style="font-size:2.5rem" id="auth-profile-avatar">🧠</div>
+        <div>
+          <div style="font-weight:700;font-size:1.1rem" id="auth-profile-name"></div>
+          <div style="font-size:.82rem;color:var(--text-muted)" id="auth-profile-level"></div>
+        </div>
+        <div style="margin-left:auto;text-align:right">
+          <div style="color:var(--gold);font-weight:700" id="auth-profile-coins">💰 0</div>
+          <div style="font-size:.78rem;color:var(--text-muted)" id="auth-profile-xp">XP: 0</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;text-align:center">
+        <div class="stat-mini"><b id="auth-stat-games">0</b><div>Игр</div></div>
+        <div class="stat-mini"><b id="auth-stat-wins">0</b><div>Побед</div></div>
+        <div class="stat-mini"><b id="auth-stat-score">0</b><div>Очков</div></div>
+      </div>
+      <!-- Достижения -->
+      <h3 style="font-size:.9rem;margin-bottom:8px">🏅 Достижения</h3>
+      <div id="auth-achievements" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>
+      <button class="btn btn-ghost btn-full" id="btn-auth-logout">Выйти из аккаунта</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js" defer></script>
+<script src="/static/js/game.js" defer></script>
+</body>
+</html>

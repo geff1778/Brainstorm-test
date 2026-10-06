@@ -1,0 +1,40 @@
+# Render Blueprint — infrastructure as code for one-click deploy.
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: brainstorm
+    runtime: python
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -c gunicorn.conf.py wsgi:app
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.12.6
+      - key: SOCKETIO_ASYNC_MODE
+        value: eventlet
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_SECRET_KEY
+        sync: false
+      - key: CHEAT_TESTER_CODE
+        sync: false
+      - key: GIGACHAT_CLIENT_ID
+        sync: false
+      - key: GIGACHAT_CREDENTIALS
+        sync: false
+      - key: GIGACHAT_MODEL
+        value: GigaChat
+      - key: GIGACHAT_SCOPE
+        value: GIGACHAT_API_PERS
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: DATA_DIR
+        value: data

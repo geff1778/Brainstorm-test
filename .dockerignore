@@ -1,0 +1,39 @@
+# ── Version control / CI ──────────────────────────────────────
+.git
+.gitignore
+.github
+
+# ── Environments & secrets ────────────────────────────────────
+.venv
+venv
+env
+.env
+.env.*
+!.env.example
+
+# ── Python caches ─────────────────────────────────────────────
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# ── Tests & docs (not needed at runtime) ──────────────────────
+tests
+docs
+*.md
+!README.md
+
+# ── Data & logs ───────────────────────────────────────────────
+data
+*.db
+*.sqlite3
+*.log
+logs
+
+# ── Local tooling ─────────────────────────────────────────────
+.vscode
+.idea
+.DS_Store
+node_modules

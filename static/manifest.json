@@ -1,0 +1,26 @@
+{
+  "name": "Мозговой Штурм — BrainStorm",
+  "short_name": "BrainStorm",
+  "description": "Интерактивная викторина в реальном времени с вопросами от ИИ.",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f0b1e",
+  "theme_color": "#8b5cf6",
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+services:
+  brainstorm:
+    build: .
+    image: brainstorm:latest
+    container_name: brainstorm
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      ENV: production
+      PORT: "5000"
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in your environment or .env}
+      ADMIN_SECRET_KEY: ${ADMIN_SECRET_KEY:-change-me}
+      CHEAT_TESTER_CODE: ${CHEAT_TESTER_CODE:-change-me}
+      GIGACHAT_CLIENT_ID: ${GIGACHAT_CLIENT_ID:-}
+      GIGACHAT_CREDENTIALS: ${GIGACHAT_CREDENTIALS:-}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      DATA_DIR: /app/data
+      LOG_LEVEL: INFO
+    volumes:
+      - brainstorm-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  brainstorm-data:
