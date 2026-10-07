@@ -6,13 +6,13 @@ from flask import Blueprint, jsonify, request, session
 
 from ..services import accounts, achievements
 from ..validation import as_str
-from .helpers import _auth_limiter, rate_limit
+from .helpers import auth_limiter, rate_limit
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 
 @bp.post("/register")
-@rate_limit(_auth_limiter, key_prefix="register")
+@rate_limit(auth_limiter, key_prefix="register")
 def register():
     """Create an account and start a session."""
     body = request.get_json(silent=True) or {}
@@ -24,7 +24,7 @@ def register():
 
 
 @bp.post("/login")
-@rate_limit(_auth_limiter, key_prefix="login")
+@rate_limit(auth_limiter, key_prefix="login")
 def login():
     """Authenticate an existing account."""
     body = request.get_json(silent=True) or {}

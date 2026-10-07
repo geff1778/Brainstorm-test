@@ -10,8 +10,8 @@ services:
       ENV: production
       PORT: "5000"
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in your environment or .env}
-      ADMIN_SECRET_KEY: ${ADMIN_SECRET_KEY:-change-me}
-      CHEAT_TESTER_CODE: ${CHEAT_TESTER_CODE:-change-me}
+      ADMIN_SECRET_KEY: ${ADMIN_SECRET_KEY:?set ADMIN_SECRET_KEY in your environment or .env}
+      CHEAT_TESTER_CODE: ${CHEAT_TESTER_CODE:?set CHEAT_TESTER_CODE in your environment or .env}
       GIGACHAT_CLIENT_ID: ${GIGACHAT_CLIENT_ID:-}
       GIGACHAT_CREDENTIALS: ${GIGACHAT_CREDENTIALS:-}
       GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat}

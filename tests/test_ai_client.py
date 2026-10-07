@@ -81,6 +81,38 @@ class TestNormalisation:
         result = ai_client.normalise_question(question, 2)
         assert 0 <= result["correct"] < 2
 
+    def test_meta_option_is_rejected(self):
+        question = {"question": "Какой ответ верный?",
+                    "options": ["Первый", "Все перечисленные", "Второй"], "correct": 0}
+        assert ai_client.normalise_question(question, 3) is None
+
+    def test_none_of_the_above_is_rejected(self):
+        question = {"question": "Какой ответ верный?",
+                    "options": ["Первый", "Ничего из перечисленного", "Второй"], "correct": 0}
+        assert ai_client.normalise_question(question, 3) is None
+
+    def test_long_explanation_is_truncated(self):
+        question = {"question": "A valid question here?", "options": ["a", "b"],
+                    "correct": 0, "explanation": "x" * 1000}
+        result = ai_client.normalise_question(question, 2)
+        assert len(result["explanation"]) == 300
+
+
+class TestPrompt:
+    def test_prompt_pins_count_and_index_range(self):
+        prompt = ai_client.build_prompt("История", 7, "hard", 4)
+        assert "7" in prompt
+        assert "0..3" in prompt
+        assert "История" in prompt
+
+    def test_prompt_includes_example_json(self):
+        prompt = ai_client.build_prompt("Космос", 3, "easy", 4)
+        assert '"questions"' in prompt and '"correct"' in prompt
+
+    def test_prompt_mentions_used_hashes(self):
+        prompt = ai_client.build_prompt("тема", 2, "medium", 4, used_hashes=["abcdef123456"])
+        assert "abcdef123456" in prompt
+
 
 class TestParsing:
     def test_parses_markdown_fenced_json(self):

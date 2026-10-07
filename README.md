@@ -16,6 +16,22 @@
 
 ---
 
+## 🌐 Играть онлайн / Play online
+
+**Production:** [https://brainstorm-c0ap.onrender.com/](https://brainstorm-c0ap.onrender.com/)
+
+<p align="center">
+  <a href="https://brainstorm-c0ap.onrender.com/">
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://brainstorm-c0ap.onrender.com/" alt="QR-код сайта / site QR code" width="220"/>
+  </a>
+</p>
+
+<p align="center">
+  📱 Отсканируй QR-код телефоном, чтобы открыть игру · Scan the QR code with your phone to open the game.
+</p>
+
+---
+
 ## 🌐 English
 
 ### What is BrainStorm?
@@ -102,7 +118,7 @@ static/js/game.js        # client (views, socket, rendering)
 static/css/style.css     # design system
 static/manifest.json     # PWA manifest
 static/js/sw.js          # service worker
-tests/                   # pytest suite (179 tests)
+tests/                   # pytest suite (190 tests)
 ```
 
 ### Local setup
@@ -132,14 +148,14 @@ installs dependencies, probes GigaChat and prints the LAN URL for phones.
 | `DEBUG` | `false` | Flask debug + auto-reload. Must be `false` in production. |
 | `LOG_LEVEL` | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR`. |
 | `SOCKETIO_ASYNC_MODE` | auto | `eventlet` \| `threading` \| `gevent`. Auto = eventlet if installed, else threading. |
-| `SECRET_KEY` | insecure dev value | **Required in production.** Generate: `python -c "import secrets;print(secrets.token_urlsafe(48))"`. |
+| `SECRET_KEY` | — (required in prod) | Session signing key. No hardcoded default: blank ⇒ random per-process in dev, **startup error in production**. Generate: `python -c "import secrets;print(secrets.token_urlsafe(48))"`. |
 | `SESSION_COOKIE_SECURE` | `false` | Set `true` when served over HTTPS. |
 | `CORS_ORIGINS` | `*` | Comma-separated allowed Socket.IO origins. Use explicit origins in production. |
 | `TRUST_PROXY` | `false` | Trust `X-Forwarded-For` (only behind a trusted proxy). |
 | `RATE_LIMIT_ENABLED` | `true` | Toggle rate limiting globally. |
 | `AUTH_RATE_LIMIT` | `10` | Auth attempts per IP per window. |
-| `ADMIN_SECRET_KEY` | `1777` | **Change in production.** Admin panel key. |
-| `CHEAT_TESTER_CODE` | `19112009` | **Change in production.** Tester/cheat mode code. |
+| `ADMIN_SECRET_KEY` | — (required in prod) | Admin panel key. No hardcoded default. |
+| `CHEAT_TESTER_CODE` | — (required in prod) | Tester/cheat mode code. No hardcoded default. |
 | `GIGACHAT_CLIENT_ID` | — | Optional GigaChat client id. |
 | `GIGACHAT_CREDENTIALS` | — | GigaChat authorization key. Empty ⇒ offline fallback bank. |
 | `GIGACHAT_MODEL` / `GIGACHAT_SCOPE` | `GigaChat` / `GIGACHAT_API_PERS` | GigaChat model and scope. |
@@ -264,7 +280,7 @@ python run.py                    # http://localhost:5000
 ### Переменные окружения
 
 Полная таблица переменных приведена выше в английском разделе. Ключевые: `SECRET_KEY`,
-`ADMIN_SECRET_KEY`, `CHEAT_TESTER_CODE` (обязательно сменить в продакшене),
+`ADMIN_SECRET_KEY`, `CHEAT_TESTER_CODE` (в продакшене обязательны, дефолтов в коде нет),
 `GIGACHAT_CREDENTIALS` (пусто ⇒ офлайн-банк вопросов), `DATA_DIR`, `ENV`.
 
 > **Безопасность:** `.env` в `.gitignore` и не должен попадать в репозиторий. Если секрет уже

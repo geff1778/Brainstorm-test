@@ -155,14 +155,34 @@ let profile = JSON.parse(localStorage.getItem("bs_profile") || "null") || {
 };
 
 /* ═══ Theme init ═══ */
-(function(){
-  if(document.body){
-    document.body.className = localStorage.getItem("bs_theme") || "dark";
-  } else {
-    document.addEventListener("DOMContentLoaded", ()=>{
-      document.body.className = localStorage.getItem("bs_theme") || "dark";
-    });
+const Theme = (function(){
+  const KEY = "bs_theme";
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+  function _resolve(mode){
+    return mode === "dark" || (mode === "auto" && media.matches);
   }
+
+  function apply(mode){
+    const m = (mode === "light" || mode === "dark") ? mode : "auto";
+    const isDark = _resolve(m);
+    document.documentElement.dataset.theme = m;
+    document.documentElement.classList.toggle("dark", isDark);
+    document.documentElement.classList.toggle("light", !isDark);
+    const meta = document.querySelector('meta[name="theme-color"]:not([media])');
+    if(meta) meta.setAttribute("content", isDark ? "#0f0b1e" : "#f4f1ff");
+    localStorage.setItem(KEY, m);
+    return m;
+  }
+
+  function current(){ return localStorage.getItem(KEY) || "auto"; }
+
+  // Re-apply automatically when the OS scheme changes while in "auto" mode.
+  media.addEventListener("change", () => { if(current() === "auto") apply("auto"); });
+
+  apply(current());
+
+  return { apply, current, isDark: () => _resolve(current()) };
 })();
 
 /* ════════════ NEURAL NETWORK BACKGROUND ════════════ */
@@ -409,13 +429,25 @@ async function loadLeaderboard(){
 
 /* ════════════ SETTINGS SYNC ════════════ */
 function syncSettingsUI(){
-  makeToggle($("toggle-theme"), document.body.classList.contains("dark"), v=>{ document.body.className=v?"dark":"light"; localStorage.setItem("bs_theme",v?"dark":"light"); });
+  _syncThemeSegmented();
   makeToggle($("toggle-sound"), soundEnabled, v=>{ soundEnabled=v; localStorage.setItem("bs_sound",v?"on":"off"); });
   makeToggle($("toggle-tick"), tickEnabled, v=>{ tickEnabled=v; localStorage.setItem("bs_tick",v?"on":"off"); });
   makeToggle($("toggle-confetti"), confettiEnabled, v=>{ confettiEnabled=v; localStorage.setItem("bs_confetti",v?"on":"off"); });
   makeToggle($("toggle-particles"), particlesOn, v=>{ particlesOn=v; localStorage.setItem("bs_particles",v?"on":"off"); });
   makeToggle($("toggle-event-sound"), eventSoundOn, v=>{ eventSoundOn=v; localStorage.setItem("bs_evtsound",v?"on":"off"); });
   makeToggle($("toggle-animations"), animationsOn, v=>{ animationsOn=v; localStorage.setItem("bs_anim",v?"on":"off"); });
+}
+
+/* Wire the light/auto/dark segmented control to the Theme manager. */
+function _syncThemeSegmented(){
+  const seg = $("theme-segmented"); if(!seg) return;
+  const mode = Theme.current();
+  seg.querySelectorAll(".seg-btn").forEach(btn=>{
+    const active = btn.dataset.themeMode === mode;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+    btn.onclick = () => { Theme.apply(btn.dataset.themeMode); _syncThemeSegmented(); };
+  });
 }
 
 /* ════════════ INIT UI ════════════ */
@@ -707,6 +739,8 @@ function initCheatMenu(_nick){
 
   makeToggle($("cheat-infinite-lives"), false, v=>{ cheatInfLives=v; socket.emit("cheat_set_infinite_lives",{enabled:v}); toast(v?"♾️ Бесконечные жизни вкл":"♾️ выкл"); });
   makeToggle($("cheat-free-rephrase"),  false, v=>{ cheatFreeRephrase=v; toast(v?"🔄 Бесплатные перефразировки вкл":"🔄 выкл"); });
+  makeToggle($("cheat-invisibility"),   false, v=>{ socket.emit("cheat_toggle_invisibility",{enabled:v}); toast(v?"👻 Невидимость вкл":"👻 выкл"); });
+  makeToggle($("cheat-godmode"),        false, v=>{ socket.emit("cheat_grant_power",{enabled:v}); toast(v?"🛡️ Режим бога вкл":"🛡️ выкл"); });
 
   makeToggle($("cheat-presentation-global"), false, v=>{
     socket.emit("set_presentation_mode",{enabled:v});
@@ -720,6 +754,12 @@ function initCheatMenu(_nick){
     toast("⏭️ Вопрос пропущен");
     NeuralBg.pulse("#fbbf24",0.9);
   });
+  on($("cheat-reveal-btn"),"click",()=>{ if(!isTester)return; socket.emit("cheat_reveal_answer",{}); toast("👁️ Ответ показан"); });
+  on($("cheat-fill-btn"),"click",()=>{ if(!isTester)return; socket.emit("cheat_fill_answer",{}); toast("✅ Ответили за всех"); });
+  on($("cheat-reset-answers-btn"),"click",()=>{ if(!isTester)return; socket.emit("cheat_reset_answers",{}); toast("🔁 Вопрос переоткрыт"); });
+  on($("cheat-clear-chat-btn"),"click",()=>{ if(!isTester)return; socket.emit("cheat_clear_chat",{}); toast("🧹 Чат очищен"); });
+  const diffSel = $("cheat-difficulty");
+  if(diffSel){ diffSel.value = "medium"; diffSel.onchange = () => { if(!isTester)return; socket.emit("cheat_set_difficulty",{difficulty:diffSel.value}); toast("🎚️ Сложность: "+diffSel.value); }; }
   on($("cheat-set-lives-btn"),"click",()=>{
     if(!isTester)return;
     const name=($("cheat-lives-player").value||"").trim();
@@ -763,14 +803,18 @@ function startCheatStats(){ if(!isTester||!roomCode)return; stopCheatStats(); _c
 function stopCheatStats(){ if(_cheatStatsTimer){clearInterval(_cheatStatsTimer);_cheatStatsTimer=null;} }
 function renderCheatStats(d){
   const el=$("cheat-answer-stats"); if(!el||!isTester)return;
-  if(!d||!Object.keys(d.answer_counts||{}).length){el.textContent="Нет ответов пока";return;}
+  if(!d||d.ok===false){ el.textContent="Нет данных"; return; }
+  if(!Object.keys(d.answer_counts||{}).length){
+    el.textContent = d.total_active ? `Ждём ответы: 0/${d.total_active}` : "Нет активных игроков";
+    return;
+  }
   const L=["A","B","C","D","E","F"];
   let html='<div style="display:flex;flex-direction:column;gap:4px">';
   for(const[idx,cnt] of Object.entries(d.answer_counts)){
     const names=(d.answer_players||{})[idx]||[];
     html+=`<div style="font-size:.78rem"><b>${escHtml(L[idx]||String(idx))}:</b> ${cnt}× — ${names.map(escHtml).join(", ")}</div>`;
   }
-  html+=`<div style="font-size:.75rem;color:var(--text-muted);margin-top:3px">Ответили: ${d.total_answered}/${d.total_active}</div></div>`;
+  html+=`<div style="font-size:.75rem;color:var(--text-muted);margin-top:3px">Ответили: ${d.total_answered}/${d.total_active}${d.question_number?` · Вопрос ${d.question_number}/${d.total_questions}`:""}</div></div>`;
   el.innerHTML=html;
 }
 
@@ -862,13 +906,15 @@ const CHEAT_HELP = {
   'see-answer': '👁 Видеть правильный ответ\n\nПодсвечивает правильный ответ золотым цветом. Работает только для тебя, другие игроки не видят подсветку. Помогает при тестировании или если застрял на вопросе.',
   'edit-scores': '💰 Редактор очков (+/−50)\n\nДобавляет кнопки +50 и −50 рядом с твоим счётом. Позволяет быстро изменить очки любого игрока. Используй для балансировки или тестирования.',
   'infinite-lives': '♾️ Бесконечные жизни\n\nВ режиме "На вылет" ты не теряешь жизни при неправильных ответах. Полезно для тестирования сложных уровней.',
-  'free-rephrase': '🔄 Неограниченные перефразировки\n\nПерефразировка вопроса обычно стоит 50 очков. С этим читом она бесплатная и неограниченная.'
+  'free-rephrase': '🔄 Неограниченные перефразировки\n\nПерефразировка вопроса обычно стоит 50 очков. С этим читом она бесплатная и неограниченная.',
+  'invisibility': '👻 Невидимость\n\nТы исчезаешь из списка игроков, но продолжаешь видеть вопросы и результаты. Удобно, чтобы тихо наблюдать за игрой, не мешая участникам.',
+  'godmode': '🛡️ Режим бога\n\nТы исключён из таймера вопроса (тебя не наказывают за просроченный ответ) и получаешь бесконечные жизни. Идеально для отладки без спешки.'
 };
 
 function showCheatHelp(cheatId){
   const content = CHEAT_HELP[cheatId] || 'Описание недоступно';
   const el = $('cheat-help-content');
-  if(el) el.innerHTML = content.replace(/\n/g, '<br>');
+  if(el) el.innerHTML = escHtml(content).replace(/\n/g, '<br>');
   const modal = $('modal-cheat-help');
   if(modal) modal.style.display = 'flex';
 }
@@ -1931,7 +1977,7 @@ function initSocket(){
   socket.on("interim_results",data=>toast(`📊 Сложность: ${{easy:"Лёгкая",medium:"Средняя",hard:"Сложная"}[data.difficulty]||data.difficulty}`));
   socket.on("reaction_received",data=>{ const el=document.createElement("div");el.className="reaction-float";el.style.left=(20+Math.random()*60)+"%";el.style.bottom="80px";el.innerHTML=data.emoji;$("reactions-overlay")?.appendChild(el);setTimeout(()=>el.remove(),2000); });
 
-  socket.on("cheat_ack",data=>{ const m={infinite_lives:"♾️",invisible:"👻",reset_player:"🗑",rename:"✏️",reset_global_stats:"🗑 БД",presentation_mode:"📺",skip_question:"⏭️",set_lives:"❤️",add_score_all:"💰"}; toast(`${m[data.feature]||"✅"} ${data.enabled!==undefined?(data.enabled?"вкл":"выкл"):(data.ok?"ок":"ошибка")}`); });
+  socket.on("cheat_ack",data=>{ const m={infinite_lives:"♾️",invisible:"👻",invisibility:"👻",reset_player:"🗑",rename:"✏️",reset_global_stats:"🗑 БД",presentation_mode:"📺",skip_question:"⏭️",set_lives:"❤️",add_score_all:"💰",fill_answer:"✅",reveal_answer:"👁️",clear_chat:"🧹",reset_answers:"🔁",set_difficulty:"🎚️",godmode:"🛡️",teleport:"🔀"}; toast(`${m[data.feature]||"✅"} ${data.enabled!==undefined?(data.enabled?"вкл":"выкл"):(data.ok?"ок":"ошибка")}`); });
   socket.on("cheat_player_reset",data=>toast(`🗑 Очки ${data.name} сброшены`));
   socket.on("cheat_score_updated",data=>{ if(data.sid===socket.id){myScore=data.score;if($("g-score"))$("g-score").textContent=myScore;} });
   socket.on("lives_restored",data=>{ toast(`❤️ ${data.name}: ${data.lives} жизней`); });

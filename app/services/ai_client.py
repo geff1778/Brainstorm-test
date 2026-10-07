@@ -43,9 +43,27 @@ DIFFICULTY_LABELS: dict[str, str] = {
 }
 
 SYSTEM_PROMPT = (
-    "Ты — составитель вопросов для викторины. Отвечай ТОЛЬКО валидным JSON. "
-    '"correct" = индекс правильного ответа (0-3). Проверяй: options[correct] верен. '
-    "Варианты разные, факты проверяемы. Избегай двусмысленности."
+    "Ты — методист-составитель вопросов для викторины «Мозговой Штурм». "
+    "Твоя единственная задача — вернуть корректный JSON-объект с вопросами.\n"
+    "\n"
+    "ЖЁСТКИЕ ПРАВИЛА:\n"
+    "1. Отвечай ТОЛЬКО JSON-объектом вида {\"questions\": [...]}. "
+    "Никакого текста, пояснений, markdown или ```-блоков до/после JSON.\n"
+    "2. В массиве РОВНО столько вопросов, сколько просят в запросе.\n"
+    "3. Каждый вопрос — объект ровно с полями: "
+    "\"question\" (строка), \"options\" (массив строк), \"correct\" (целое число), "
+    "\"explanation\" (строка), \"hint\" (строка).\n"
+    "4. \"correct\" — индекс правильного ответа в \"options\" с нуля (0..N-1). "
+    "Перед выводом мысленно проверь: options[correct] — действительно правильный.\n"
+    "5. В \"options\" ровно N вариантов, все РАЗНЫЕ, правдоподобные, одного типа и языка. "
+    "Нельзя вариантов «всё перечисленное», «ничего из перечисленного», «нет ответа».\n"
+    "6. Правильный ответ НЕ должен быть очевидно длиннее или подробнее остальных.\n"
+    "7. \"explanation\" — один короткий проверяемый факт (≤ 140 символов). "
+    "\"hint\" — намёк, который НЕ называет правильный вариант (≤ 120 символов).\n"
+    "8. Факты должны быть однозначными и проверяемыми. "
+    "Никаких вопросов с двумя верными ответами, устаревших данных и выдуманных фактов.\n"
+    "9. Язык вопросов, вариантов и пояснений — русский.\n"
+    "10. Если не можешь составить вопрос по теме — верни меньше вопросов, но не выдумывай факты."
 )
 
 _JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```")
@@ -86,27 +104,48 @@ def _mark_bonus(questions: list[dict], chance: float = 0.15) -> list[dict]:
 # ─────────────────────────────────────────────────────────────
 def build_prompt(topic: str, count: int, difficulty: str, num_options: int,
                  used_hashes: list[str] | None = None) -> str:
-    """Build the user prompt requesting ``count`` questions."""
+    """Build a precise, self-contained user prompt for question generation.
+
+    The prompt restates the hard constraints (exact count, option count, index
+    range, no duplicate options) so the model does not have to infer them, and
+    pins ``correct`` to a 0-based index.  A concrete, fully worked example keeps
+    the output shape stable.
+    """
     diff_label = DIFFICULTY_LABELS.get(difficulty, DIFFICULTY_LABELS["medium"])
     max_idx = num_options - 1
+    example_options = ["Ag", "Au", "Fe", "Cu", "Sn", "Pb"][:num_options]
     example = {
         "question": "Какой химический символ у золота?",
-        "options": ["Ag", "Au", "Fe", "Cu"][:num_options],
-        "correct": min(1, max_idx),
+        "options": example_options,
+        "correct": 1,
         "explanation": "Au — от латинского Aurum.",
         "hint": "Благородный металл жёлтого цвета.",
     }
     example_json = json.dumps({"questions": [example]}, ensure_ascii=False, indent=2)
     used_block = ""
     if used_hashes:
-        used_block = f"⛔ Не повторяй: {', '.join(used_hashes[-10:])}\n"
+        used_block = (
+            "⛔ Не повторяй эти вопросы (идентификаторы уже заданных): "
+            f"{', '.join(used_hashes[-10:])}\n"
+        )
     return (
-        f'Создай {count} вопросов по теме: "{topic}". Сложность: {diff_label}.\n'
+        f'Составь РОВНО {count} вопросов викторины по теме: "{topic}".\n'
+        f"Уровень сложности: {diff_label}.\n"
         f"{used_block}"
-        "Требования: факты проверяемы, варианты разные, explanation краткий.\n"
-        f'"correct" = индекс (0-{max_idx}). Проверяй: options[correct] верен.\n'
-        f"Пример:\n{example_json}\n"
-        "JSON:"
+        "\n"
+        "ФОРМАТ ОТВЕТА — только JSON-объект {\"questions\": [...]}, без текста вокруг:\n"
+        f"{example_json}\n"
+        "\n"
+        "ТРЕБОВАНИЯ К КАЖДОМУ ВОПРОСУ:\n"
+        f"• options: ровно {num_options} разных правдоподобных вариантов (A.."
+        f"{chr(_LETTER_BASE + max_idx)}), одного языка и уровня детализации;\n"
+        f"• correct: целое число 0..{max_idx} — индекс правильного варианта в options; "
+        "ОБЯЗАТЕЛЬНО перепроверь, что options[correct] — верный ответ;\n"
+        "• explanation: короткое проверяемое пояснение (≤ 140 символов);\n"
+        "• hint: намёк без прямого указания правильного варианта (≤ 120 символов);\n"
+        "• факты однозначные и проверяемые; не используй «всё/ничего из перечисленного».\n"
+        "\n"
+        "Верни только JSON."
     )
 
 
@@ -131,9 +170,42 @@ def _sleep(seconds: float) -> None:
         time.sleep(seconds)
 
 
+#: JSON schema that pins the model's output shape.  When GigaChat supports
+#: structured output this makes replies machine-parseable with far fewer
+#: malformed answers than free-form prompting.
+_QUESTIONS_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "questions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string"},
+                    "options": {"type": "array", "items": {"type": "string"}},
+                    "correct": {"type": "integer"},
+                    "explanation": {"type": "string"},
+                    "hint": {"type": "string"},
+                },
+                "required": ["question", "options", "correct"],
+            },
+        }
+    },
+    "required": ["questions"],
+}
+
+
 def call_gigachat(user_prompt: str, system: str = SYSTEM_PROMPT, *,
-                  retries: int = 2, timeout: int | None = None) -> str:
+                  retries: int = 2, timeout: int | None = None,
+                  json_schema: dict | None = None) -> str:
     """Send a single-turn chat request to GigaChat and return the text reply.
+
+    Parameters
+    ----------
+    json_schema:
+        Optional JSON schema enabling structured output.  Callers that expect
+        JSON pass :data:`_QUESTIONS_SCHEMA`; if the installed SDK or model does
+        not support it the request silently falls back to plain chat.
 
     Raises
     ------
@@ -163,6 +235,8 @@ def call_gigachat(user_prompt: str, system: str = SYSTEM_PROMPT, *,
                     {"role": "system", "content": system},
                     {"role": "user", "content": user_prompt},
                 ])
+                if json_schema is not None:
+                    chat = _with_json_schema(chat, json_schema)
                 response = client.chat(chat)
                 content = response.choices[0].message.content
             if content and content.strip():
@@ -175,6 +249,16 @@ def call_gigachat(user_prompt: str, system: str = SYSTEM_PROMPT, *,
                 _sleep(0.5 * attempt)
 
     raise AIUnavailableError(f"GigaChat недоступен: {last_error}")
+
+
+def _with_json_schema(chat, schema: dict):
+    """Attach a structured-output schema, tolerating SDKs without support."""
+    try:
+        from gigachat.models.response_format import JsonSchemaResponseFormat
+        chat.response_format = JsonSchemaResponseFormat(schema=schema)
+    except Exception:  # noqa: BLE001 - older SDK, plain JSON prompting still works
+        pass
+    return chat
 
 
 # ─────────────────────────────────────────────────────────────
@@ -294,8 +378,20 @@ def _convert_batch_indices(questions: list[dict], num_options: int) -> list[dict
     return questions
 
 
+_META_OPTION_RE = re.compile(
+    r"^\s*(все\s+(?:выше)?перечисленн\w*|ничего\s+из\s+перечисленн\w*|"
+    r"все\s+ответы|нет\s+(?:правильного\s+)?ответа|всё\s+выше|оба\s+варианта)\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+
+
 def normalise_question(question: dict, num_options: int) -> dict | None:
-    """Validate and normalise a single question, or return ``None``."""
+    """Validate and normalise a single question, or return ``None``.
+
+    Beyond shape normalisation this rejects low-quality output: questions whose
+    stem is too short, options that are duplicates, and "all/none of the above"
+    meta-options that make a question untestable.
+    """
     if not isinstance(question, dict):
         return None
 
@@ -309,6 +405,8 @@ def normalise_question(question: dict, num_options: int) -> dict | None:
 
     options = [str(o).strip() for o in options if str(o).strip()]
     if len(options) < 2:
+        return None
+    if any(_META_OPTION_RE.match(o) for o in options):
         return None
 
     while len(options) < num_options:
@@ -330,8 +428,8 @@ def normalise_question(question: dict, num_options: int) -> dict | None:
     normalised["correct"] = normalise_correct_index(question, num_options)
     if not 0 <= normalised["correct"] < len(unique_options):
         normalised["correct"] = 0
-    normalised["explanation"] = str(question.get("explanation") or "").strip()
-    normalised["hint"] = str(question.get("hint") or "").strip()
+    normalised["explanation"] = str(question.get("explanation") or "").strip()[:300]
+    normalised["hint"] = str(question.get("hint") or "").strip()[:300]
     return normalised
 
 
@@ -366,12 +464,16 @@ def generate_questions(topic: str, count: int, difficulty: str, num_options: int
             prompt = build_prompt(topic, count, difficulty, num_options, used_hashes)
             logger.info("GigaChat request: topic=%s count=%d diff=%s opts=%d",
                         topic, count, difficulty, num_options)
-            raw = call_gigachat(prompt)
+            raw = call_gigachat(prompt, json_schema=_QUESTIONS_SCHEMA)
             questions = _convert_batch_indices(_parse_response(raw), num_options)
             validated = [q for q in (normalise_question(item, num_options) for item in questions) if q]
             unique = _deduplicate(validated, seen)
+            if len(unique) < count:
+                logger.info("GigaChat returned %d/%d usable questions; topping up from bank",
+                            len(unique), count)
+                unique += _get_fallback_questions(count - len(unique), num_options, seen)
             if unique:
-                logger.info("GigaChat produced %d/%d valid questions", len(unique), len(questions))
+                logger.info("GigaChat produced %d questions", len(unique))
                 return _mark_bonus(unique[:count])
             logger.warning("All GigaChat questions were filtered out; using fallback")
         except AIUnavailableError as exc:

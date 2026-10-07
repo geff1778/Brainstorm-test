@@ -1,27 +1,22 @@
 """Application configuration.
 
 All runtime configuration is read from environment variables exactly once, at
-import time, and validated.  Importing this module never crashes for missing
-optional values: safe development defaults are used instead.  However, when
-``ENV`` is ``production`` the :func:`Settings.validate` method raises for
-insecure defaults so that a misconfigured deployment fails fast instead of
-silently shipping the development secret key.
+import time.  **Secrets are never hardcoded**: :func:`_secret` reads them from
+the environment and, in production, refuses to start when one is missing.  In
+development a random per-process value is generated so the app still boots
+without a ``.env`` while nothing sensitive is baked into the source tree.
+:meth:`Settings.validate` additionally rejects weak-but-present values in
+production so a misconfigured deployment fails fast.
 """
 
 from __future__ import annotations
 
 import os
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-_INSECURE_SECRET_DEFAULTS = {
-    "brainstorm-super-secret-key-change-me-in-production",
-    "brainstorm-secret-2024",
-    "change-me",
-    "",
-}
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -48,6 +43,22 @@ def _env_list(name: str, default: list[str] | None = None) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _secret(name: str, *, min_length: int = 16) -> str:
+    """Read a secret from the environment.
+
+    Secrets are never hardcoded. When a value is absent we raise in production
+    (fail fast) and otherwise generate a random, process-local value so the app
+    still boots for development. Generated values change on every restart, so
+    nothing sensitive is ever baked into the source tree.
+    """
+    value = (os.getenv(name) or "").strip()
+    if value:
+        return value
+    if os.getenv("ENV", "development").strip().lower() in {"production", "prod"}:
+        raise RuntimeError(f"{name} must be set in production")
+    return secrets.token_urlsafe(max(min_length, 24))
+
+
 @dataclass(frozen=True)
 class Settings:
     """Immutable snapshot of the process environment."""
@@ -60,11 +71,11 @@ class Settings:
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO").upper())
 
     # ── Security ─────────────────────────────────────────────
-    secret_key: str = field(
-        default_factory=lambda: os.getenv("SECRET_KEY", "brainstorm-super-secret-key-change-me-in-production")
-    )
-    admin_secret_key: str = field(default_factory=lambda: os.getenv("ADMIN_SECRET_KEY", "1777"))
-    cheat_tester_code: str = field(default_factory=lambda: os.getenv("CHEAT_TESTER_CODE", "19112009"))
+    # Secrets come exclusively from the environment (see ``_secret``); there are
+    # no hardcoded fallbacks anywhere in the codebase.
+    secret_key: str = field(default_factory=lambda: _secret("SECRET_KEY"))
+    admin_secret_key: str = field(default_factory=lambda: _secret("ADMIN_SECRET_KEY"))
+    cheat_tester_code: str = field(default_factory=lambda: _secret("CHEAT_TESTER_CODE"))
     session_cookie_secure: bool = field(default_factory=lambda: _env_bool("SESSION_COOKIE_SECURE", False))
     cors_origins: list[str] = field(default_factory=lambda: _env_list("CORS_ORIGINS", ["*"]))
     trust_proxy: bool = field(default_factory=lambda: _env_bool("TRUST_PROXY", False))
@@ -114,16 +125,20 @@ class Settings:
             return "threading"
 
     def validate(self) -> None:
-        """Fail fast on insecure production configuration."""
+        """Fail fast on insecure production configuration.
+
+        Secrets are already required by :func:`_secret` at construction time in
+        production, so this focuses on weak-but-present values and unsafe flags.
+        """
         if not self.is_production:
             return
         problems: list[str] = []
-        if self.secret_key in _INSECURE_SECRET_DEFAULTS or len(self.secret_key) < 24:
-            problems.append("SECRET_KEY must be a long, random value in production")
-        if self.admin_secret_key in {"1777", "", "admin"}:
-            problems.append("ADMIN_SECRET_KEY must be changed from the default in production")
-        if self.cheat_tester_code in {"19112009", ""}:
-            problems.append("CHEAT_TESTER_CODE must be changed from the default in production")
+        if len(self.secret_key) < 24:
+            problems.append("SECRET_KEY must be at least 24 characters")
+        if len(self.admin_secret_key) < 12:
+            problems.append("ADMIN_SECRET_KEY must be at least 12 characters")
+        if len(self.cheat_tester_code) < 8:
+            problems.append("CHEAT_TESTER_CODE must be at least 8 characters")
         if self.debug:
             problems.append("DEBUG must be disabled in production")
         if problems:

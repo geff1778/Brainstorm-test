@@ -1,9 +1,13 @@
 /* ══════════════════════════════════════════════════════
-   BrainStorm — style.css  v7 (custom bg color + themes)
+   BrainStorm — style.css  v8 (colour-scheme aware themes)
    ══════════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700;900&family=Nunito:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap');
 
+/* Native form controls / scrollbars follow the active scheme. */
+:root { color-scheme: light dark; }
+
+/* ── Base (dark) palette ─────────────────────────────────────── */
 :root {
   --bg:          #0b0720;
   --bg2:         #110d2c;
@@ -35,7 +39,8 @@
 }
 
 /* ── ТЁМНАЯ ТЕМА (мягкая) ── */
-body.dark {
+html.dark {
+  color-scheme: dark;
   --bg:          #0f0b1e;
   --bg2:         #16112e;
   --bg3:         #1e1540;
@@ -48,7 +53,8 @@ body.dark {
 }
 
 /* ── СВЕТЛАЯ ТЕМА (мягкая, не вырвиглазная) ── */
-body.light {
+html.light {
+  color-scheme: light;
   --bg:          #f4f1ff;
   --bg2:         #ede8ff;
   --bg3:         #e0d8ff;
@@ -111,7 +117,7 @@ body[style*="--user-bg"] {
   animation-delay:var(--delay,0s);
 }
 @keyframes star-twinkle { 0%,100%{opacity:.1;transform:scale(1)} 50%{opacity:.6;transform:scale(1.4)} }
-body.light .bg-stars span { background: rgba(100,60,200,0.5); }
+html.light .bg-stars span { background: rgba(100,60,200,0.5); }
 
 #neural-canvas { position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.45; }
 
@@ -437,6 +443,23 @@ body.light .bg-stars span { background: rgba(100,60,200,0.5); }
 .toggle.on{background:var(--primary);}
 .toggle::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .25s;}
 .toggle.on::after{transform:translateX(20px);}
+
+/* ── Сегментированный переключатель (тема оформления) ── */
+.segmented{
+  display:inline-flex;gap:4px;padding:4px;border-radius:12px;
+  background:var(--inp-bg);border:1px solid var(--card-border);
+}
+.seg-btn{
+  border:none;background:transparent;color:var(--text-muted);cursor:pointer;
+  font-family:var(--font-body);font-size:.82rem;font-weight:700;
+  padding:8px 14px;border-radius:9px;transition:background .2s,color .2s,transform .15s;
+  white-space:nowrap;
+}
+.seg-btn:hover{color:var(--text);background:var(--card-hover);}
+.seg-btn.active{
+  background:linear-gradient(135deg,var(--primary),var(--accent2));
+  color:#fff;box-shadow:0 4px 14px var(--primary-glow);
+}
 
 /* ── Выбор цвета фона ── */
 .color-picker-wrap {

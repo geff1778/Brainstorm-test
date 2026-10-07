@@ -52,6 +52,73 @@ class TestCheatEvents:
         socket_client.emit("cheat_update_score", {"score": 999})
         assert _collect(socket_client, "cheat_score_updated", timeout=1.0) is None
 
+    def test_room_stats_requires_privilege(self, socket_factory, tester_client, client):
+        host = socket_factory()
+        created = _create_room(host)
+        code = created["room_code"]
+        # A plain client is refused.
+        denied = client.get(f"/api/cheat/room_stats/{code}")
+        assert denied.status_code == 403
+        # A tester session is allowed and gets the distribution shape.
+        allowed = tester_client.get(f"/api/cheat/room_stats/{code}")
+        assert allowed.status_code == 200
+        payload = allowed.get_json()
+        assert payload["ok"] is True and "answer_counts" in payload
+
+    def test_room_stats_missing_room_is_404(self, tester_client):
+        assert tester_client.get("/api/cheat/room_stats/ZZZZZZ").status_code == 404
+
+    def test_cheat_invisibility_toggle(self, socket_factory, tester_client):
+        sock = socket_factory(flask_test_client=tester_client)
+        _create_room(sock)
+        sock.emit("cheat_toggle_invisibility", {"enabled": True})
+        ack = _collect(sock, "cheat_ack")
+        assert ack["feature"] == "invisibility" and ack["enabled"] is True
+
+    def test_cheat_skip_question_advances_once(self, socket_factory, tester_client):
+        sock = socket_factory(flask_test_client=tester_client)
+        created = _create_room(sock)
+        code = created["room_code"]
+        # Manually place the room into a playing state with one question.
+        from app.domain.registry import registry
+        room = registry.get(code)
+        room.questions = [{"question": "Сколько будет два плюс два?",
+                           "options": ["3", "4", "5", "6"], "correct": 1,
+                           "explanation": "", "hint": ""}]
+        room.state = "playing"
+        room.current_q = 0
+        room.resolved_q = -1
+        sock.emit("cheat_skip_question", {})
+        _collect(sock, "cheat_ack")
+        # The guard must prevent a second resolve from advancing past the end.
+        assert room.resolved_q == 0
+        room2 = registry.get(code)
+        assert room2.state in {"playing", "finished"}
+
+    def test_resolve_question_is_idempotent(self, socket_factory, tester_client):
+        sock = socket_factory(flask_test_client=tester_client)
+        created = _create_room(sock)
+        from app.domain.registry import registry
+        from app.realtime import socket_events
+        room = registry.get(created["room_code"])
+        room.questions = [
+            {"question": "Первый вопрос здесь?", "options": ["a", "b"], "correct": 0,
+             "explanation": "", "hint": ""},
+            {"question": "Второй вопрос здесь?", "options": ["a", "b"], "correct": 0,
+             "explanation": "", "hint": ""},
+        ]
+        room.state = "playing"
+        room.current_q = 0
+        room.resolved_q = -1
+        socket_events._resolve_question(room)
+        assert room.current_q == 1, "first resolve advances to question 2"
+        # Simulate the race: a second resolver targets the *same* index that was
+        # already claimed.  It must be a no-op, not skip a question.
+        room.resolved_q = 0
+        room.current_q = 0
+        socket_events._resolve_question(room)
+        assert room.current_q == 0, "a claimed index must not be resolved twice"
+
 
 class TestAdminEvents:
     def test_admin_kick_removes_player(self, socket_factory, admin_client):

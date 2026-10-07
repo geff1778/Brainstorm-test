@@ -21,10 +21,11 @@ from ..security import RateLimiter, client_ip
 
 logger = get_logger(__name__)
 
-#: Rate limiters shared by the HTTP blueprints.
-_auth_limiter = RateLimiter(settings.auth_rate_limit, settings.auth_rate_window)
-_ai_limiter = RateLimiter(settings.ai_rate_limit, settings.ai_rate_window)
-_api_limiter = RateLimiter(600, 60)
+#: Rate limiters shared by the HTTP blueprints.  Public names so tests can
+#: reset them between cases.
+auth_limiter = RateLimiter(settings.auth_rate_limit, settings.auth_rate_window)
+ai_limiter = RateLimiter(settings.ai_rate_limit, settings.ai_rate_window)
+api_limiter = RateLimiter(600, 60)
 
 
 def current_username() -> str | None:

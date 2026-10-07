@@ -19,7 +19,7 @@ from .helpers import require_admin
 bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 logger = get_logger(__name__)
 
-_activation_limiter = RateLimiter(5, 300)
+activation_limiter = RateLimiter(5, 300)
 
 
 def _client_ip() -> str:
@@ -32,7 +32,7 @@ def _client_ip() -> str:
 def activate():
     """Activate admin (or cheat) mode using a shared key."""
     ip = _client_ip()
-    if not _activation_limiter.allow(ip):
+    if not activation_limiter.allow(ip):
         return jsonify({"ok": False, "error": "Слишком много попыток"}), 429
     body = request.get_json(silent=True) or {}
     key = as_str(body.get("key"))

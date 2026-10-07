@@ -146,6 +146,10 @@ class Room:
     is_sandbox: bool = False
     game_start_time: float = 0.0
     answer_log: list[dict] = field(default_factory=list)
+    #: Index of the question currently being resolved; guards against two
+    #: concurrent resolvers (e.g. the timer and a fast correct answer) both
+    #: advancing the game and skipping a question.
+    resolved_q: int = -1
     last_activity: float = field(default_factory=time.time)
 
     # ── Derived properties ───────────────────────────────────
@@ -424,12 +428,50 @@ class Room:
         player.score -= JOKER_COST
         return sorted([correct, random.choice(wrong)])
 
+    def set_lives(self, sid: str, lives: int) -> int | None:
+        """Force a player's life count (admin/cheat tooling).
+
+        Returns the new count, or ``None`` when the player is unknown.  A player
+        dropped to zero becomes a spectator, matching :meth:`lose_life`.
+        """
+        player = self.players.get(sid)
+        if player is None:
+            return None
+        player.lives = max(0, int(lives))
+        if player.lives == 0:
+            player.is_spectator = True
+        return player.lives
+
     # ── Adaptive difficulty ──────────────────────────────────
     def record_answer_stat(self, correct: bool) -> None:
         """Record whether the round's answers included a correct one."""
         self.recent_correct.append(bool(correct))
         if len(self.recent_correct) > DIFFICULTY_WINDOW:
             self.recent_correct.pop(0)
+
+    def answer_distribution(self) -> dict:
+        """Summarise the live answer spread for the current question.
+
+        Used by the cheat panel's hidden statistics view.  ``answer_players``
+        maps an option index to the names that picked it; unanswered and
+        spectator players are excluded from ``total_active``.
+        """
+        active = self.active_players
+        counts: dict[int, int] = {}
+        players: dict[int, list[str]] = {}
+        for player in active:
+            index = player.answer_index
+            if index is None or index < 0:
+                continue
+            counts[index] = counts.get(index, 0) + 1
+            players.setdefault(index, []).append(player.name)
+        answered = sum(counts.values())
+        return {
+            "answer_counts": {str(k): v for k, v in sorted(counts.items())},
+            "answer_players": {str(k): v for k, v in sorted(players.items())},
+            "total_answered": answered,
+            "total_active": len(active),
+        }
 
     def recalculate_difficulty(self) -> str:
         """Adjust difficulty based on the recent correct-answer ratio."""
@@ -474,6 +516,7 @@ class Room:
         self.state = _STATE_WAITING
         self.questions = []
         self.current_q = 0
+        self.resolved_q = -1
         self.ffa_first = None
         self.recent_correct = []
         self.answer_log = []

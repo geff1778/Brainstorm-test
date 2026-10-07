@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request
 from ..errors import ValidationError
 from ..services import achievements, learn
 from ..validation import as_int, as_str, validate_url
-from .helpers import _ai_limiter, current_username, rate_limit
+from .helpers import ai_limiter, current_username, rate_limit
 
 bp = Blueprint("learn", __name__, url_prefix="/api/learn")
 
@@ -27,7 +27,7 @@ def _generate(content: str, num: int):
 
 
 @bp.post("/from_text")
-@rate_limit(_ai_limiter, key_prefix="learn_text")
+@rate_limit(ai_limiter, key_prefix="learn_text")
 def from_text():
     """Generate questions from pasted text."""
     body = request.get_json(silent=True) or {}
@@ -39,7 +39,7 @@ def from_text():
 
 
 @bp.post("/from_url")
-@rate_limit(_ai_limiter, key_prefix="learn_url")
+@rate_limit(ai_limiter, key_prefix="learn_url")
 def from_url():
     """Fetch a page and generate questions from its text."""
     body = request.get_json(silent=True) or {}

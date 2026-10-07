@@ -41,12 +41,19 @@ def app():
     from app import create_app
     from app.db import LEADERBOARD_DB, USER_DB, init_databases
     from app.domain.registry import registry
+    from app.http_api import admin_routes, cheat_routes, helpers
 
     for path in (LEADERBOARD_DB, USER_DB):
         if path.exists():
             path.unlink()
     init_databases()
     registry.clear()
+
+    # The rate limiters are process-global; clear them so tests do not leak
+    # activation attempts into one another.
+    for limiter in (cheat_routes.activation_limiter, admin_routes.activation_limiter,
+                    helpers.auth_limiter, helpers.ai_limiter, helpers.api_limiter):
+        limiter.reset()
 
     application = create_app()
     application.config.update(TESTING=True)

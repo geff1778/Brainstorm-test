@@ -129,15 +129,23 @@ def _emit_to_all(room: Room, event: str, payload: dict) -> None:
 # ─────────────────────────────────────────────────────────────
 #  Question lifecycle
 # ─────────────────────────────────────────────────────────────
+def _question_time(room: Room) -> int:
+    """Per-question time limit, honouring the host's ``timer`` setting."""
+    return clamp(as_int(room.settings.get("timer", TIME_PER_Q), default=TIME_PER_Q), 10, 120)
+
+
 def _emit_question(room: Room) -> None:
     question = room.current_question
     if not question:
         return
+    # Mark the freshly shown question as unresolved so its own resolve pass runs.
+    room.resolved_q = -1
+    time_limit = _question_time(room)
     base = {
         "question": {"question": question["question"], "options": question["options"]},
         "question_number": room.current_q + 1,
         "total_questions": room.total_questions,
-        "time_limit": TIME_PER_Q,
+        "time_limit": time_limit,
         "mode": room.mode,
         "is_bonus": bool(question.get("bonus")),
         "difficulty": room.difficulty,
@@ -155,7 +163,7 @@ def _emit_question(room: Room) -> None:
         if player.instant_answer:
             payload["instant_answer"] = True
         _socketio.emit("new_question", payload, room=sid)
-    scheduler.spawn_after(TIME_PER_Q + 1, _timeout_question, room.code, room.current_q)
+    scheduler.spawn_after(time_limit + 1, _timeout_question, room.code, room.current_q)
 
 
 def _timeout_question(code: str, question_index: int) -> None:
@@ -176,6 +184,12 @@ def _resolve_question(room: Room) -> None:
     question = room.current_question
     if not question:
         return
+    # Re-entrancy guard: the answer path, the timer and the cheat "skip" can all
+    # try to resolve the same question.  Whoever gets here first wins; the rest
+    # return immediately so a question is never advanced twice.
+    if room.resolved_q == room.current_q:
+        return
+    room.resolved_q = room.current_q
     correct_index = question["correct"]
     options = question["options"]
     correct_text = options[correct_index] if 0 <= correct_index < len(options) else "?"
@@ -390,14 +404,20 @@ def register_handlers(socketio, gigachat_code: str) -> None:
                 "presentation": bool(room.settings.get("presentation_mode")), "rejoin": True,
             })
             if room.current_question:
-                emit("new_question", {
-                    "question": room.current_question,
+                question = room.current_question
+                payload = {
+                    "question": {"question": question["question"], "options": question["options"]},
                     "question_number": room.current_q + 1,
                     "total_questions": room.total_questions, "time_limit": TIME_PER_Q,
                     "difficulty": room.current_difficulty, "mode": room.mode,
-                    "is_bonus": bool(room.current_question.get("bonus")),
-                    "cheat_correct": room.current_question["correct"], "rejoin": True,
-                })
+                    "is_bonus": bool(question.get("bonus")), "rejoin": True,
+                    "team_scores": room.team_scores(),
+                    "team_names": {tid: t.name for tid, t in room.teams.items()},
+                    "presentation": bool(room.settings.get("presentation_mode")),
+                }
+                if is_cheater:
+                    payload["cheat_correct"] = question["correct"]
+                emit("new_question", payload)
         if not invisible:
             for sid in room.players:
                 if sid != request.sid:
@@ -1093,9 +1113,9 @@ def register_handlers(socketio, gigachat_code: str) -> None:
         if not target:
             _err("Игрок не найден")
             return
-        target.lives = clamp(as_int(data.get("lives", 3), default=3), 0, 10)
-        target.is_spectator = target.lives == 0
-        _emit_to_all(room, "lives_restored", {"name": target.name, "lives": target.lives})
+        lives = room.set_lives(target.sid, clamp(as_int(data.get("lives", 3), default=3), 0, 10))
+        _emit_to_all(room, "lives_restored", {"name": target.name, "lives": lives})
+        _broadcast_players(room)
         emit("cheat_ack", {"feature": "set_lives", "ok": True})
 
     @socketio.on("cheat_add_score_all")
@@ -1117,11 +1137,15 @@ def register_handlers(socketio, gigachat_code: str) -> None:
     def on_cheat_skip(_data=None):
         """Skip the current question and advance (cheat mode)."""
         room, _ = _require_cheater()
-        if not room or room.state != "playing":
+        if not room or room.state != "playing" or not room.current_question:
             return
+        # Claim the current index so a racing timer/answer cannot also resolve it.
+        if room.resolved_q == room.current_q:
+            return
+        room.resolved_q = room.current_q
         emit("cheat_ack", {"feature": "skip_question", "ok": True})
         _emit_to_all(room, "question_result", {
-            "correct_index": room.current_question["correct"] if room.current_question else 0,
+            "correct_index": room.current_question["correct"],
             "correct_answer": "", "explanation": "Вопрос пропущен", "player_answers": {},
             "scores": {sid: p.score for sid, p in room.players.items()},
             "team_scores": room.team_scores(), "team_names": {t: v.name for t, v in room.teams.items()},
@@ -1205,6 +1229,112 @@ def register_handlers(socketio, gigachat_code: str) -> None:
             "settings": target_room.settings, "is_sandbox": target_room.is_sandbox,
             "teams": target_room.teams_list(), "team_draft_active": target_room.team_draft_active,
         })
+
+    # ── Cheat: additional tester tooling ─────────────────────
+    @socketio.on("cheat_toggle_invisibility")
+    def on_cheat_invisibility(data=None):
+        """Toggle the caller's own invisibility in the room (cheat mode).
+
+        Invisible players are hidden from the roster but still receive every
+        question; this is useful for silently spectating a live game.
+        """
+        data = data or {}
+        room, player = _require_cheater()
+        if not room:
+            return
+        player.is_invisible = as_bool(data.get("enabled"))
+        emit("cheat_ack", {"feature": "invisibility", "enabled": player.is_invisible})
+        _broadcast_players(room)
+
+    @socketio.on("cheat_fill_answer")
+    def on_cheat_fill_answer(data=None):
+        """Answer every remaining player correctly at once (cheat mode).
+
+        Every active player who has not answered is marked correct and awarded
+        points, then the question is resolved.  Handy to skip the wait when
+        testing the post-question screens.
+        """
+        data = data or {}
+        room, _ = _require_cheater()
+        if not room or room.state != "playing" or not room.current_question:
+            return
+        if room.resolved_q == room.current_q:
+            return
+        for player in room.answering_players():
+            if player.answered or player.instant_answer:
+                continue
+            player.answered = True
+            player.answer_index = room.current_question["correct"]
+            player.answer_time = time.time()
+            room.award_point(player.sid)
+            if not player.is_invisible:
+                _socketio.emit("player_answered", {"name": player.name},
+                               room=room.code, skip_sid=player.sid)
+        emit("cheat_ack", {"feature": "fill_answer", "ok": True})
+        scheduler.spawn(_resolve_question, room)
+
+    @socketio.on("cheat_reveal_answer")
+    def on_cheat_reveal_answer(_data=None):
+        """Force-resolve the current question immediately (cheat mode)."""
+        room, _ = _require_cheater()
+        if not room or room.state != "playing" or not room.current_question:
+            return
+        if room.resolved_q == room.current_q:
+            return
+        emit("cheat_ack", {"feature": "reveal_answer", "ok": True})
+        scheduler.spawn(_resolve_question, room)
+
+    @socketio.on("cheat_clear_chat")
+    def on_cheat_clear_chat(_data=None):
+        """Wipe the room chat (cheat mode)."""
+        room, _ = _require_cheater()
+        if not room:
+            return
+        chat_store.clear(room.code)
+        _emit_to_all(room, "chat_cleared", {})
+        emit("cheat_ack", {"feature": "clear_chat", "ok": True})
+
+    @socketio.on("cheat_reset_answers")
+    def on_cheat_reset_answers(_data=None):
+        """Re-open the current question so everyone can answer again (cheat mode)."""
+        room, _ = _require_cheater()
+        if not room or room.state != "playing" or not room.current_question:
+            return
+        room.reset_answers()
+        room.resolved_q = -1
+        emit("cheat_ack", {"feature": "reset_answers", "ok": True})
+        _broadcast_players(room)
+        _emit_question(room)
+
+    @socketio.on("cheat_set_difficulty")
+    def on_cheat_set_difficulty(data=None):
+        """Force the adaptive difficulty for the room (cheat mode)."""
+        data = data or {}
+        room, _ = _require_cheater()
+        if not room:
+            return
+        difficulty = validate_difficulty(data.get("difficulty"))
+        room.current_difficulty = difficulty
+        room.settings["difficulty"] = difficulty
+        emit("cheat_ack", {"feature": "set_difficulty", "ok": True, "difficulty": difficulty})
+        _broadcast_players(room)
+
+    @socketio.on("cheat_grant_power")
+    def on_cheat_grant_power(data=None):
+        """Give the caller unlimited jokers and hints (cheat mode).
+
+        The ``instant_answer`` flag makes the timeout logic skip this player, so
+        a tester can take their time without being auto-failed.
+        """
+        data = data or {}
+        room, player = _require_cheater()
+        if not room:
+            return
+        enabled = as_bool(data.get("enabled"))
+        player.instant_answer = enabled
+        if enabled:
+            player.infinite_lives = True
+        emit("cheat_ack", {"feature": "godmode", "enabled": enabled})
 
     # ── Admin panel ──────────────────────────────────────────
     def _require_admin_room(data):

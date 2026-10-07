@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 
 from ..services import accounts, achievements, ugc
 from ..validation import as_int, as_str
-from .helpers import _api_limiter, rate_limit, require_user
+from .helpers import api_limiter, rate_limit, require_user
 
 bp = Blueprint("ugc", __name__, url_prefix="/api/ugc")
 
@@ -31,7 +31,7 @@ def my_questions():
 
 
 @bp.post("/create")
-@rate_limit(_api_limiter, key_prefix="ugc_create", by_user=True)
+@rate_limit(api_limiter, key_prefix="ugc_create", by_user=True)
 def create():
     """Submit a new UGC question."""
     username = require_user()
@@ -63,7 +63,7 @@ def vote():
 
 
 @bp.post("/report")
-@rate_limit(_api_limiter, key_prefix="ugc_report", by_user=True)
+@rate_limit(api_limiter, key_prefix="ugc_report", by_user=True)
 def report():
     """Report an inappropriate question."""
     username = require_user()

@@ -55,14 +55,20 @@ if not exist ".env" (
             timeout /t 2 /nobreak > nul
         )
     ) else (
-        echo  .env.example ne nayden, sozdayu bazovy .env
+        echo  .env.example ne nayden, generiruyu .env so sluchaynymi sekretami
+        for /f "delims=" %%S in ('python -c "import secrets;print(secrets.token_urlsafe(48))"') do set "BS_SECRET=%%S"
+        for /f "delims=" %%S in ('python -c "import secrets;print(secrets.token_urlsafe(24))"') do set "BS_ADMIN=%%S"
+        for /f "delims=" %%S in ('python -c "import secrets;print(secrets.token_urlsafe(12))"') do set "BS_CHEAT=%%S"
         (
-            echo SECRET_KEY=brainstorm-change-me
+            echo SECRET_KEY=!BS_SECRET!
+            echo ADMIN_SECRET_KEY=!BS_ADMIN!
+            echo CHEAT_TESTER_CODE=!BS_CHEAT!
             echo HOST=0.0.0.0
             echo PORT=5000
             echo DEBUG=false
             echo LOG_LEVEL=INFO
         ) > .env
+        echo  Sekrety sgenerirovany sluchayno.
     )
 ) else (
     echo  OK: .env naydyen
