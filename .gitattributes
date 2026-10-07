@@ -1,0 +1,36 @@
+# Normalise line endings in the repository.
+* text=auto eol=lf
+
+# Windows launchers must keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Python
+*.py text diff=python
+*.pyi text diff=python
+
+# Markup / config
+*.md text
+*.json text
+*.yml text
+*.yaml text
+*.toml text
+*.html text
+*.css text
+*.js text
+
+# Binaries — never diff, never convert.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary
+
+# Keep language stats honest.
+static/** linguist-vendored=false
+templates/** linguist-vendored=false

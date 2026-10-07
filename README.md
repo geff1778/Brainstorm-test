@@ -5,12 +5,15 @@
 **Realtime AI-powered quiz platform — build a game on any topic and play with friends from any device.**
 **Платформа интерактивных викторин в реальном времени: играй с друзьями с любого устройства, а вопросы генерирует GigaChat.**
 
-[![CI](https://github.com/t-1mka/BrainStorm/actions/workflows/ci.yml/badge.svg)](https://github.com/t-1mka/BrainStorm/actions/workflows/ci.yml)
+[![CI](https://github.com/geff1778/Brainstorm-test/actions/workflows/ci.yml/badge.svg)](https://github.com/geff1778/Brainstorm-test/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-3.x-000000?logo=flask)
 ![Socket.IO](https://img.shields.io/badge/Socket.IO-realtime-010101?logo=socket.io)
 ![GigaChat](https://img.shields.io/badge/GigaChat-AI-21A038)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/geff1778/Brainstorm-test/main/.github/badges/tests.json)
+
+**Topics:** `flask` · `socketio` · `realtime` · `quiz` · `gigachat` · `python` · `education` · `pwa`
 
 </div>
 
@@ -29,6 +32,14 @@
 <p align="center">
   📱 Отсканируй QR-код телефоном, чтобы открыть игру · Scan the QR code with your phone to open the game.
 </p>
+
+---
+
+## 📖 Contents / Содержание
+
+- [English](#-english) — [What is BrainStorm?](#what-is-brainstorm) · [Features](#features) · [Architecture](#architecture) · [Local setup](#local-setup) · [Environment variables](#environment-variables-env) · [Tests & quality](#tests--quality) · [Production](#production) · [API & event reference](#api--event-reference)
+- [Русский](#-русский) — [Что такое BrainStorm?](#что-такое-brainstorm) · [Возможности](#возможности) · [Архитектура](#архитектура) · [Локальный запуск](#локальный-запуск) · [Переменные окружения](#переменные-окружения) · [Тесты и качество](#тесты-и-качество) · [Продакшен](#продакшен)
+- [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 ---
 
@@ -213,7 +224,16 @@ docker compose up --build          # http://localhost:5000
 
 ### License
 
-MIT — see the repository for details.
+MIT — see [LICENSE](LICENSE). © 2026 geff1778.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Code of Conduct](CODE_OF_CONDUCT.md) before opening a pull request. For security issues use
+[SECURITY.md](SECURITY.md) — not a public issue. Planned work lives in [ROADMAP.md](ROADMAP.md),
+and notable changes are tracked in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -317,4 +337,13 @@ docker compose up --build          # http://localhost:5000
 
 ### Лицензия
 
-MIT.
+MIT — см. [LICENSE](LICENSE). © 2026 geff1778.
+
+---
+
+## 🤝 Участие в разработке
+
+Мы рады вкладу! Перед созданием pull request прочитайте [CONTRIBUTING.md](CONTRIBUTING.md) и
+[Кодекс поведения](CODE_OF_CONDUCT.md). Об уязвимостях сообщайте по [SECURITY.md](SECURITY.md),
+а не через публичный issue. Планы развития — в [ROADMAP.md](ROADMAP.md), заметные изменения —
+в [CHANGELOG.md](CHANGELOG.md).

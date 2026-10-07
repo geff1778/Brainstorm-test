@@ -1,0 +1,55 @@
+name: ✨ Feature request
+description: Suggest an idea or improvement for BrainStorm.
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make BrainStorm better! Check [ROADMAP.md](../blob/main/ROADMAP.md)
+        first — your idea may already be planned.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem does this solve? Why is it valuable?
+      placeholder: As a host, I want to… so that…
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the feature or change you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you thought about.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Gameplay / modes
+        - AI (GigaChat)
+        - Accounts / progression
+        - UGC / moderation
+        - Realtime / chat
+        - UI / UX
+        - Infrastructure / ops
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and the roadmap; this is not a duplicate.
+          required: true

@@ -1,0 +1,66 @@
+name: 🐛 Bug report
+description: Report something that is broken or behaves unexpectedly.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please fill in as much detail as you can.
+        For security issues, **do not** use this form — see [SECURITY.md](../blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected to happen.
+      placeholder: When I press "Start game" the timer never begins…
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps so we can reproduce the problem.
+      placeholder: |
+        1. Create a room with topic "History"
+        2. Join from a second device
+        3. Press "Start game"
+        4. See error
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: The app version (see `/health`) or commit SHA.
+      placeholder: "2.0.0 / 8344993"
+    validations:
+      required: false
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where does it happen?
+      options:
+        - Local development (python run.py)
+        - Docker / docker-compose
+        - Render (or another cloud host)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / screenshots
+      description: Paste server logs or console output. Redact any secrets.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I am not reporting a security vulnerability here.
+          required: true

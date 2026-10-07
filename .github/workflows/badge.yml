@@ -1,0 +1,61 @@
+name: Tests badge
+
+# Keeps the "tests passing" badge honest by regenerating a shields.io endpoint
+# with the current pass/fail status and the number of collected tests.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        env:
+          ENV: test
+          SECRET_KEY: ci-secret-key-that-is-definitely-long-enough
+          SOCKETIO_ASYNC_MODE: threading
+          GIGACHAT_CREDENTIALS: ""
+          RATE_LIMIT_ENABLED: "false"
+        run: |
+          set +e
+          output=$(pytest -q 2>&1)
+          code=$?
+          count=$(pytest --collect-only -q 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
+          if [ "$code" -eq 0 ]; then
+            status="passing"; color="brightgreen"
+          else
+            status="failing"; color="red"
+          fi
+          mkdir -p .github/badges
+          cat > .github/badges/tests.json <<EOF
+          {"schemaVersion":1,"label":"tests","message":"${count} ${status}","color":"${color}"}
+          EOF
+          cat .github/badges/tests.json
+          exit 0
+
+      - name: Commit badge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/badges/tests.json
+          git diff --quiet --cached || git commit -m "chore: update tests badge"
+          git push

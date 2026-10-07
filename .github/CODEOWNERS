@@ -1,0 +1,8 @@
+# Default owner for everything in the repository.
+* @geff1778
+
+# Realtime + security-sensitive code benefits from a careful review.
+/app/realtime/        @geff1778
+/app/security.py      @geff1778
+/app/config.py        @geff1778
+/.github/             @geff1778

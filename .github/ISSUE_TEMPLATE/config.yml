@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/geff1778/Brainstorm-test/security/advisories/new
+    about: Please report security issues privately, not as a public issue.
+  - name: 📚 Documentation
+    url: https://github.com/geff1778/Brainstorm-test/blob/main/README.md
+    about: Setup, architecture, environment variables and deployment are documented here.
