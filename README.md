@@ -40,6 +40,7 @@
 - [English](#-english) — [What is BrainStorm?](#what-is-brainstorm) · [Features](#features) · [Architecture](#architecture) · [Local setup](#local-setup) · [Environment variables](#environment-variables-env) · [Tests & quality](#tests--quality) · [Production](#production) · [API & event reference](#api--event-reference)
 - [Русский](#-русский) — [Что такое BrainStorm?](#что-такое-brainstorm) · [Возможности](#возможности) · [Архитектура](#архитектура) · [Локальный запуск](#локальный-запуск) · [Переменные окружения](#переменные-окружения) · [Тесты и качество](#тесты-и-качество) · [Продакшен](#продакшен)
 - [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
+- [OHP — OpenHands orchestration platform](platform/README.md) — the multi-agent delivery control plane that lives in [`platform/`](platform/).
 
 ---
 

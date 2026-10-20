@@ -1,0 +1,24 @@
+# Platform configuration. Every value can be overridden by an environment
+# variable of the same name prefixed with OHP_.
+# Copy to config/platform.yaml and edit; bootstrap reads it on first run.
+
+db_path: "${HOME}/.ohp/platform.db"
+agent_server_url: "http://127.0.0.1:60000"
+cloud_url: "https://app.all-hands.dev"
+
+# Concurrency and timing. Keep max_parallel low: each task spawns a full agent
+# conversation that consumes model tokens.
+max_parallel: 3
+lease_seconds: 600
+task_timeout_s: 1800
+poll_interval_s: 5
+
+# Reasoning effort passed to delegated conversations.
+reasoning_effort: "high"
+
+# Model used when a task says "inherit". Leave empty to use the agent server's
+# configured model. On a managed OpenHands runtime the working value is
+# typically "openhands/deepseek-v4.1-flash".
+model: ""
+
+log_level: "INFO"
